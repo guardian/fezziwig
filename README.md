@@ -5,9 +5,11 @@ Fezziwig
 
 Installation
 ------------
+```
 libraryDependencies ++= Seq(
   "com.gu" %% "fezziwig" % "0.1.0"
 )
+```
 
 Usage
 -----
