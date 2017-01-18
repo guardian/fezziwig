@@ -14,6 +14,28 @@ pomExtra := (
       <developerConnection>scm:git:git@github.com:guardian/fezziwig.git</developerConnection>
       <url>git@github.com:guardian/fezziwig.git</url>
     </scm>
+    <developers>
+      <developer>
+        <id>tomrf1</id>
+        <name>Tom Forbes</name>
+        <url>https://github.com/tomrf1</url>
+      </developer>
+      <developer>
+        <id>cb372</id>
+        <name>Chris Birchall</name>
+        <url>https://github.com/cb372</url>
+      </developer>
+      <developer>
+        <id>mchv</id>
+        <name>Mariot Chauvin</name>
+        <url>https://github.com/mchv</url>
+      </developer>
+      <developer>
+        <id>LATaylor-guardian</id>
+        <name>Luke Taylor</name>
+        <url>https://github.com/LATaylor-guardian</url>
+      </developer>
+    </developers>
   )
 publishMavenStyle := true
 publishArtifact in Test := false
