@@ -1,8 +1,41 @@
+import sbt.Keys._
+import sbtrelease.ReleaseStateTransformations._
 
 name := "fezziwig"
 scalaVersion := "2.11.8"
+organization := "com.gu"
 
 val circeVersion = "0.6.1"
+
+pomExtra := (
+  <url>https://github.com/guardian/fezziwig</url>
+    <scm>
+      <connection>scm:git:git@github.com:guardian/fezziwig.git</connection>
+      <developerConnection>scm:git:git@github.com:guardian/fezziwig.git</developerConnection>
+      <url>git@github.com:guardian/fezziwig.git</url>
+    </scm>
+  )
+publishMavenStyle := true
+publishArtifact in Test := false
+pomIncludeRepository := { _ => false }
+crossPaths := false
+releasePublishArtifactsAction := PgpKeys.publishSigned.value
+licenses := Seq("Apache v2" -> url("http://www.apache.org/licenses/LICENSE-2.0.html"))
+releaseProcess := Seq(
+  checkSnapshotDependencies,
+  inquireVersions,
+  runClean,
+  runTest,
+  setReleaseVersion,
+  commitReleaseVersion,
+  tagRelease,
+  publishArtifacts,
+  setNextVersion,
+  commitNextVersion,
+  releaseStepCommand("sonatypeReleaseAll"),
+  pushChanges
+)
+resolvers += Resolver.sonatypeRepo("releases")
 
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
@@ -16,5 +49,5 @@ libraryDependencies ++= Seq(
 )
 
 //For tests
-scroogeThriftSourceFolder in Compile := baseDirectory.value / "src/test/thrift"
-unmanagedResourceDirectories in Compile += { baseDirectory.value / "src/test/thrift" }
+scroogeThriftSourceFolder in Test := baseDirectory.value / "src/test/thrift"
+unmanagedResourceDirectories in Test += { baseDirectory.value / "src/test/thrift" }
