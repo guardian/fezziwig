@@ -40,7 +40,6 @@ pomExtra := (
 publishMavenStyle := true
 publishArtifact in Test := false
 pomIncludeRepository := { _ => false }
-crossPaths := false
 releasePublishArtifactsAction := PgpKeys.publishSigned.value
 licenses := Seq("Apache v2" -> url("http://www.apache.org/licenses/LICENSE-2.0.html"))
 releaseProcess := Seq(
