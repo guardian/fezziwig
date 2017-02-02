@@ -5,7 +5,7 @@ name := "fezziwig"
 scalaVersion := "2.11.8"
 organization := "com.gu"
 
-val circeVersion = "0.6.1"
+val circeVersion = "0.7.0"
 
 pomExtra := (
   <url>https://github.com/guardian/fezziwig</url>

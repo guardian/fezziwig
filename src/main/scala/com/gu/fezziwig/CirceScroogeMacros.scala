@@ -74,8 +74,8 @@ class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       // Note: we don't simply call `cursor.get[$tpe](...)` because we want to avoid allocating HistoryOp instances.
       // See https://github.com/travisbrown/circe/issues/329 for details.
       val decodeParam =
-      q"""cursor.cursor.downField(${name.toString})
-           .fold[_root_.io.circe.Decoder.Result[$tpe]](_root_.scala.Left(_root_.io.circe.DecodingFailure("Missing field: " + ${name.toString}, Nil)))(x => x.as[$tpe]($implicitDecoder))"""
+      q"""cursor.downField(${name.toString}).success
+           .map(x => x.as[$tpe]($implicitDecoder)).getOrElse(_root_.scala.Left(_root_.io.circe.DecodingFailure("Missing field: " + ${name.toString}, Nil)))"""
 
       val expr =
         if (param.asTerm.isParamWithDefault) {
@@ -147,7 +147,7 @@ class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     * We need to match on the single JSON field and determine which member of the union is present.
     * So the decoder will contain a case statement for the member foo as follows:
     *   {{{
-    *   case "foo" => c.cursor.downField("foo").flatMap(_.as[FooStruct](decoderForFooStruct).toOption).map(Foo)
+    *   case "foo" => c.downField("foo").flatMap(_.as[FooStruct](decoderForFooStruct).toOption).map(Foo)
     *   }}}
     *
     */
@@ -165,12 +165,12 @@ class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
       val implicitDecoderForParam: c.Tree = getImplicitDecoder(paramType)
 
-      cq"""$paramName => c.cursor.downField($paramName).flatMap(_.as[$paramType]($implicitDecoderForParam).toOption).map($applyMethod)"""
+      cq"""$paramName => c.downField($paramName).success.flatMap(_.as[$paramType]($implicitDecoderForParam).toOption).map($applyMethod)"""
     }
 
     q"""
       _root_.io.circe.Decoder.instance {(c: _root_.io.circe.HCursor) =>
-        val result = c.cursor.fields.getOrElse(Nil).headOption.flatMap {
+        val result = c.fields.getOrElse(Nil).headOption.flatMap {
           case ..${decoderCases ++ Seq(cq"""_ => _root_.scala.None""")}
         }
         Either.fromOption(result, DecodingFailure(${A.typeSymbol.fullName}, c.history))
