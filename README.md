@@ -10,12 +10,19 @@ Installation
 ------------
 ```
 libraryDependencies ++= Seq(
-  "com.gu" %% "fezziwig" % "0.2.0"
+  "com.gu" %% "fezziwig" % "0.3"
 )
 ```
 
 Usage
 -----
 ```
-import com.gu.fezziwig.CirceScroogeMacros._
+import com.gu.fezziwig.CirceScrooge.Macros._
 ``` 
+
+For `AccumulatingDecoder` instances, separate macros need to be invoked, e.g.:
+```
+import com.gu.fezziwig.CirceScrooge.AccumulatingMacros._
+val decoder = AccumulatingDecoder[MyThriftStruct]
+val result = decoder(json.hcursor)
+```
