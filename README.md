@@ -17,12 +17,12 @@ libraryDependencies ++= Seq(
 Usage
 -----
 ```
-import com.gu.fezziwig.CirceScrooge.Macros._
+import com.gu.fezziwig.CirceScroogeMacros._
 ``` 
 
-For `AccumulatingDecoder` instances, separate macros need to be invoked, e.g.:
+The generated decoders support accumulation of errors, e.g.
 ```
-import com.gu.fezziwig.CirceScrooge.AccumulatingMacros._
-val decoder = AccumulatingDecoder[MyThriftStruct]
-val result = decoder(json.hcursor)
+import com.gu.fezziwig.CirceScroogeMacros._
+val decoder = Decoder[MyThriftStruct]
+val result = decoder.accumulating(json.hcursor)
 ```

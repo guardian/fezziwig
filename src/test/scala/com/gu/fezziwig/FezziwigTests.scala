@@ -2,12 +2,13 @@ package com.gu.fezziwig
 
 import org.scalatest.{FlatSpec, Matchers}
 import gnieh.diffson.circe._
-import io.circe.{AccumulatingDecoder, _}
+import io.circe._
 import io.circe.syntax._
 import io.circe.parser._
 import cats.syntax.either._
+import com.gu.fezziwig.CirceScroogeMacros._
 
-class FezziwigTests extends FlatSpec with Matchers {
+class FezziwigTests extends FlatSpec with Matchers  {
 
   /**
     * TODO - Currently the macros cannot handle thrift map types. There must be some shapeless magic we can do to fix this.
@@ -25,12 +26,12 @@ class FezziwigTests extends FlatSpec with Matchers {
   }
 
   implicit def intMapDecoder = Decoder.instance[scala.collection.Map[String,Seq[Int]]] { c =>
+    import cats.syntax.either._
     val result: Map[String, Seq[Int]] = Map("k" -> Seq(2))  //cheat!
     Either.right(result)
   }
 
   it should "round-trip scrooge thrift models" in {
-    import com.gu.fezziwig.CirceScrooge.Macros._
 
     val jsonString =
       """
@@ -63,8 +64,6 @@ class FezziwigTests extends FlatSpec with Matchers {
   }
 
   it should "accumulate errors" in {
-    import com.gu.fezziwig.CirceScrooge.AccumulatingMacros._
-
     //In the following json, the fields 's' and 'foo' have incorrect types
     val jsonString =
       """
@@ -85,11 +84,11 @@ class FezziwigTests extends FlatSpec with Matchers {
         |}
       """.stripMargin
 
-    val dec = AccumulatingDecoder[StructA]
+    val dec = Decoder[StructA]
 
     val jsonBefore: Json = parse(jsonString).toOption.get
 
-    val result = dec(jsonBefore.hcursor)
+    val result = dec.accumulating(jsonBefore.hcursor)
 
     result.isInvalid should be(true)
     result.swap.foreach(nel => nel.toList.length should be(2))
