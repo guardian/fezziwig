@@ -24,7 +24,7 @@ struct StructB {
 
 struct StructA {
   1: required StructB b
-  2: optional string foo
+  2: required string foo
   3: optional i32 bar
   4: required Enum e
   5: required map<string, list<i32>> intMap
