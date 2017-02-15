@@ -3,7 +3,7 @@ package com.gu.fezziwig
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
 import com.twitter.scrooge.{ThriftEnum, ThriftStruct, ThriftUnion}
-import io.circe.{Decoder, Encoder}
+import io.circe.{ Decoder, Encoder}
 import shapeless.{Lazy, |¬|}
 
 /**
@@ -27,7 +27,7 @@ object CirceScroogeMacros {
   implicit def encodeThriftUnion[A <: ThriftUnion]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftUnion[A]
 }
 
-class CirceScroogeMacrosImpl(val c: blackbox.Context) {
+private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
   import c.universe._
 
   /**
@@ -59,6 +59,7 @@ class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     * }
     * }}}
     */
+
   def decodeThriftStruct[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
     val A = weakTypeOf[A]
 
@@ -71,26 +72,79 @@ class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
       val implicitDecoder: c.Tree = getImplicitDecoder(tpe)
 
-      // Note: we don't simply call `cursor.get[$tpe](...)` because we want to avoid allocating HistoryOp instances.
-      // See https://github.com/travisbrown/circe/issues/329 for details.
-      val decodeParam =
-      q"""cursor.downField(${name.toString}).success
-           .map(x => x.as[$tpe]($implicitDecoder)).getOrElse(_root_.scala.Left(_root_.io.circe.DecodingFailure("Missing field: " + ${name.toString}, Nil)))"""
+      val decodeExpr = {
+        val decodeParam =
+          q"""cursor.downField(${name.toString}).success
+            .map(x => x.as[$tpe]($implicitDecoder))"""
 
-      val expr =
         if (param.asTerm.isParamWithDefault) {
-          // Fallback to param's default value if the JSON field is not present (or can't be decoded for some other reason).
-          // Note: reverse-engineering the name of the default value because it's not easily available in the reflection API.
+          /**
+            * Fallback to param's default value if the JSON field is not present.
+            * If the field is present but fails to decode then it's still an error.
+            * Note: reverse-engineering the name of the default value because it's not easily available in the reflection API.
+            */
           val defaultValue = A.companion.member(TermName("apply$default$" + (i + 1)))
-          fq"""$fresh <- $decodeParam.orElse(_root_.scala.Right($defaultValue))"""
-        } else
-          fq"""$fresh <- $decodeParam"""
-      (fresh, expr)
+          fq"""$fresh <- $decodeParam.getOrElse(_root_.scala.Right($defaultValue))"""
+        } else {
+          fq"""$fresh <- $decodeParam.getOrElse(_root_.scala.Left(_root_.io.circe.DecodingFailure("Missing field: " + ${name.toString}, Nil)))"""
+        }
+      }
+
+      val accDecodeExpr = {
+        /**
+          * If we try to use the same tree twice, the compiler may blow up with the following helpful error message:
+          *   `scala.reflect.internal.Types$TypeError: value <none> is not a member of com.gu.fezziwig.FezziwigTests`
+          */
+        val decoderCopy = c.untypecheck(implicitDecoder)
+
+        val accDecodeParam =
+          q"""cursor.downField(${name.toString}).success
+            .map(x => $decoderCopy.accumulating(x))"""
+
+        if (param.asTerm.isParamWithDefault) {
+          val defaultValue = A.companion.member(TermName("apply$default$" + (i + 1)))
+          q"""$accDecodeParam.getOrElse(_root_.cats.data.Validated.valid[_root_.cats.data.NonEmptyList[_root_.io.circe.DecodingFailure],$tpe]($defaultValue))"""
+        } else {
+          q"""$accDecodeParam.getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Missing field: " + ${name.toString}, cursor.history)))"""
+        }
+      }
+
+      (fresh, decodeExpr, accDecodeExpr)
+    }
+
+    /**
+      * Accumulate cats Validated results using cartesian |@| operator, e.g.
+      * (expr1 |@| expr2 |@| ...) map (apply)
+      *
+      * This is only supported for structs with <= 22 parameters, because of a limitation in cats.
+      */
+    val accumulating: Option[Tree] = {
+      if (params.length <= 22) {
+        val validation = params.map(_._3).reduce { (acc: Tree, expr: Tree) =>
+          q"""$acc.|@|($expr)"""
+        }
+        Some(q"""
+          override def decodeAccumulating(cursor: _root_.io.circe.HCursor): _root_.io.circe.AccumulatingDecoder.Result[$A] = {
+            ($validation) map ($apply)
+          }
+        """)
+      } else {
+        c.warning(c.enclosingPosition, s"Decoder for ThriftStruct ${A.typeSymbol.name.toString} will not support accumulated errors for nested types because it has more than 22 parameters.")
+        None
+      }
     }
 
     q"""{
-      _root_.io.circe.Decoder.instance((cursor: _root_.io.circe.HCursor) => for (..${params.map(_._2)}) yield $apply(..${params.map(_._1)}))
+      new _root_.io.circe.Decoder[$A] {
+        import cats.syntax.cartesian._
+        def apply(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[$A] = {
+          for (..${params.map(_._2)}) yield $apply(..${params.map(_._1)})
+        }
+
+        ${accumulating.getOrElse(q"")}
+      }
     }"""
+
   }
 
   /**
@@ -103,10 +157,10 @@ class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     val unknown = A.companion.member(TermName(s"EnumUnknown$typeName"))
 
     q"""
-    _root_.io.circe.Decoder[String].map(value => {
-      val withoutSeparators = _root_.org.apache.commons.lang3.StringUtils.replaceChars(value, "-_", "")
-      $valueOf(withoutSeparators).getOrElse($unknown.apply(-1))
-    })
+      _root_.io.circe.Decoder[String].map(value => {
+        val withoutSeparators = _root_.org.apache.commons.lang3.StringUtils.replaceChars(value, "-_", "")
+        $valueOf(withoutSeparators).getOrElse($unknown.apply(-1))
+      })
     """
   }
 
@@ -156,7 +210,7 @@ class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
     val memberClasses: Iterable[Symbol] = getUnionMemberClasses(A)
 
-    val decoderCases: Iterable[Tree] = memberClasses.map { memberClass =>
+    val decoderCases: (List[Tree],List[Tree]) = memberClasses.toList.foldLeft(List[Tree](), List[Tree]()) { (acc, memberClass) =>
       val applyMethod = getApplyMethod(memberClass.typeSignature)
 
       val param: Symbol = applyMethod.paramLists.headOption.flatMap(_.headOption).getOrElse(c.abort(c.enclosingPosition, s"Not a valid union class: could not find the member class' parameter (${A.typeSymbol.fullName})"))
@@ -165,17 +219,39 @@ class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
       val implicitDecoderForParam: c.Tree = getImplicitDecoder(paramType)
 
-      cq"""$paramName => c.downField($paramName).success.flatMap(_.as[$paramType]($implicitDecoderForParam).toOption).map($applyMethod)"""
+      val decExpr = {
+        cq"""$paramName =>
+            c.downField($paramName).success.flatMap(_.as[$paramType]($implicitDecoderForParam).toOption).map($applyMethod)"""
+      }
+
+      val accDecExpr = {
+        val decoderCopy = c.untypecheck(implicitDecoderForParam)
+
+        cq"""$paramName =>
+          c.downField($paramName).success.map(x => $decoderCopy.accumulating(x).map($applyMethod))
+            .getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Unable to find " + $paramName, c.history)))"""
+      }
+
+      acc match { case (decs, accDecs) => (decs :+ decExpr, accDecs :+ accDecExpr) }
     }
 
-    q"""
-      _root_.io.circe.Decoder.instance {(c: _root_.io.circe.HCursor) =>
-        val result = c.fields.getOrElse(Nil).headOption.flatMap {
-          case ..${decoderCases ++ Seq(cq"""_ => _root_.scala.None""")}
+    q"""{
+      new _root_.io.circe.Decoder[$A] {
+        def apply(c: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[$A] = {
+          val result = c.fields.getOrElse(Nil).headOption.flatMap {
+            case ..${decoderCases._1 ++ Seq(cq"""_ => _root_.scala.None""")}
+          }
+          Either.fromOption(result, _root_.io.circe.DecodingFailure(${A.typeSymbol.fullName}, c.history))
         }
-        Either.fromOption(result, DecodingFailure(${A.typeSymbol.fullName}, c.history))
+
+        override def decodeAccumulating(c: _root_.io.circe.HCursor): _root_.io.circe.AccumulatingDecoder.Result[$A] = {
+          val result = c.fields.getOrElse(Nil).headOption.map {
+            case ..${decoderCases._2 ++ Seq(cq"""_ => _root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure(${A.typeSymbol.fullName}, c.history))""")}
+          }
+          result.getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure(${A.typeSymbol.fullName}, c.history)))
+        }
       }
-    """
+    }"""
   }
 
   def encodeThriftStruct[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
@@ -276,7 +352,6 @@ class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       val lazyDecoderForType = appliedType(weakTypeOf[Lazy[_]].typeConstructor, decoderForType)
       val implicitLazyDecoder = c.inferImplicitValue(lazyDecoderForType)
       if (implicitLazyDecoder.isEmpty) c.abort(c.enclosingPosition, s"Could not find an implicit Decoder[$tpe] even after resorting to Lazy")
-
       // Note: In theory we could use the `implicitLazyDecoder` that we just found, but... for some reason it crashes the compiler :(
       q"_root_.scala.Predef.implicitly[_root_.shapeless.Lazy[_root_.io.circe.Decoder[$tpe]]].value"
     }
