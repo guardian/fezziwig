@@ -115,8 +115,14 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       * Accumulate cats Validated results using cartesian |@| operator, e.g.
       * (expr1 |@| expr2 |@| ...) map (apply)
       */
-    val validation: Tree = params.map(_._3).reduce { (acc: Tree, expr: Tree) =>
-      q"""$acc.|@|($expr)"""
+    val validation: Tree = {
+      if (params.length < 22) {
+        params.map(_._3).reduce { (acc: Tree, expr: Tree) =>
+          q"""$acc.|@|($expr)"""
+        }
+      } else {
+        q"""_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Cannot generate AccumulatedDecoder for struct with 22 or more parameters", cursor.history))"""
+      }
     }
 
     q"""{
