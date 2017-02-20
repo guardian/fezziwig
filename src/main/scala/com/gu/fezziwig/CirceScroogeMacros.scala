@@ -98,7 +98,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
         val accDecodeParam =
           q"""cursor.downField(${name.toString}).success
-            .map(x => $implicitDecoder.accumulating(x)).getOrElse(_root_.cats.data.Validated.invalidNel(DecodingFailure("Attempt to decode value on failed cursor", cursor.history)))"""
+            .map(x => $implicitDecoder.accumulating(x)).getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Attempt to decode value on failed cursor", cursor.history)))"""
 
         if (param.asTerm.isParamWithDefault) {
           val defaultValue = A.companion.member(TermName("apply$default$" + (i + 1)))
@@ -213,7 +213,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         val implicitDecoderForParam: c.Tree = getImplicitDecoder(paramType)
         cq"""$paramName =>
           c.downField($paramName).success.map(x => $implicitDecoderForParam.accumulating(x).map($applyMethod))
-            .getOrElse(_root_.cats.data.Validated.invalidNel(DecodingFailure("Attempt to decode value on failed cursor", c.history)))"""
+            .getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Attempt to decode value on failed cursor", c.history)))"""
       }
 
       acc match { case (decs, accDecs) => (decs :+ decExpr, accDecs :+ accDecExpr) }
@@ -225,14 +225,14 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
           val result = c.fields.getOrElse(Nil).headOption.flatMap {
             case ..${decoderCases._1 ++ Seq(cq"""_ => _root_.scala.None""")}
           }
-          Either.fromOption(result, DecodingFailure(${A.typeSymbol.fullName}, c.history))
+          Either.fromOption(result, _root_.io.circe.DecodingFailure(${A.typeSymbol.fullName}, c.history))
         }
 
         override def decodeAccumulating(c: _root_.io.circe.HCursor): _root_.io.circe.AccumulatingDecoder.Result[$A] = {
           val result = c.fields.getOrElse(Nil).headOption.map {
-            case ..${decoderCases._2 ++ Seq(cq"""_ => _root_.cats.data.Validated.invalidNel(DecodingFailure(${A.typeSymbol.fullName}, c.history))""")}
+            case ..${decoderCases._2 ++ Seq(cq"""_ => _root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure(${A.typeSymbol.fullName}, c.history))""")}
           }
-          result.getOrElse(_root_.cats.data.Validated.invalidNel(DecodingFailure(${A.typeSymbol.fullName}, c.history)))
+          result.getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure(${A.typeSymbol.fullName}, c.history)))
         }
       }
     }"""
