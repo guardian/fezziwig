@@ -95,10 +95,10 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
           *   `scala.reflect.internal.Types$TypeError: value <none> is not a member of com.gu.fezziwig.FezziwigTests`
           */
         val implicitDecoder: c.Tree = getImplicitDecoder(tpe)
-
+        val errMsg = s"Unable to find ${name.toString}"
         val accDecodeParam =
           q"""cursor.downField(${name.toString}).success
-            .map(x => $implicitDecoder.accumulating(x)).getOrElse(_root_.cats.data.Validated.invalidNel(DecodingFailure("Attempt to decode value on failed cursor", cursor.history)))"""
+            .map(x => $implicitDecoder.accumulating(x)).getOrElse(_root_.cats.data.Validated.invalidNel(DecodingFailure($errMsg, cursor.history)))"""
 
         if (param.asTerm.isParamWithDefault) {
           val defaultValue = A.companion.member(TermName("apply$default$" + (i + 1)))
@@ -211,9 +211,10 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
       val accDecExpr = {
         val implicitDecoderForParam: c.Tree = getImplicitDecoder(paramType)
+        val errMsg = s"Unable to find value for $paramName"
         cq"""$paramName =>
           c.downField($paramName).success.map(x => $implicitDecoderForParam.accumulating(x).map($applyMethod))
-            .getOrElse(_root_.cats.data.Validated.invalidNel(DecodingFailure("Attempt to decode value on failed cursor", c.history)))"""
+            .getOrElse(_root_.cats.data.Validated.invalidNel(DecodingFailure($errMsg, c.history)))"""
       }
 
       acc match { case (decs, accDecs) => (decs :+ decExpr, accDecs :+ accDecExpr) }
