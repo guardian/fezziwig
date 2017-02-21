@@ -70,9 +70,9 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       val tpe = param.typeSignature
       val fresh = c.freshName(name)
 
-      val decodeExpr = {
-        val implicitDecoder: c.Tree = getImplicitDecoder(tpe)
+      val implicitDecoder: c.Tree = getImplicitDecoder(tpe)
 
+      val decodeExpr = {
         val decodeParam =
           q"""cursor.downField(${name.toString}).success
             .map(x => x.as[$tpe]($implicitDecoder)).getOrElse(_root_.scala.Left(_root_.io.circe.DecodingFailure("Missing field: " + ${name.toString}, Nil)))"""
@@ -90,15 +90,14 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
       val accDecodeExpr = {
         /**
-          * Note - we find the implicit decoder for the 2nd time here. If we try to use the same tree twice, the compiler
-          * may blow up with the following helpful error message:
+          * If we try to use the same tree twice, the compiler may blow up with the following helpful error message:
           *   `scala.reflect.internal.Types$TypeError: value <none> is not a member of com.gu.fezziwig.FezziwigTests`
           */
-        val implicitDecoder: c.Tree = getImplicitDecoder(tpe)
+        val decoderCopy = c.untypecheck(implicitDecoder)
 
         val accDecodeParam =
           q"""cursor.downField(${name.toString}).success
-            .map(x => $implicitDecoder.accumulating(x)).getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Attempt to decode value on failed cursor", cursor.history)))"""
+            .map(x => $decoderCopy.accumulating(x)).getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Attempt to decode value on failed cursor", cursor.history)))"""
 
         if (param.asTerm.isParamWithDefault) {
           val defaultValue = A.companion.member(TermName("apply$default$" + (i + 1)))
@@ -114,12 +113,15 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     /**
       * Accumulate cats Validated results using cartesian |@| operator, e.g.
       * (expr1 |@| expr2 |@| ...) map (apply)
+      *
+      * This is only supported for structs with <= 22 parameters, because of a limitation in cats.
       */
-    val validation: Tree = {
-      if (params.length < 22) {
-        params.map(_._3).reduce { (acc: Tree, expr: Tree) =>
+    val accumulating: Tree = {
+      if (params.length <= 22) {
+        val validation = params.map(_._3).reduce { (acc: Tree, expr: Tree) =>
           q"""$acc.|@|($expr)"""
         }
+        q"""($validation) map ($apply)"""
       } else {
         q"""_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Cannot generate AccumulatedDecoder for struct with 22 or more parameters", cursor.history))"""
       }
@@ -133,10 +135,11 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         }
 
         override def decodeAccumulating(cursor: _root_.io.circe.HCursor): _root_.io.circe.AccumulatingDecoder.Result[$A] = {
-          ($validation) map ($apply)
+          $accumulating
         }
       }
     }"""
+
   }
 
   /**
@@ -209,16 +212,17 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       val paramType = param.typeSignature.dealias
       val paramName = param.name.toString
 
+      val implicitDecoderForParam: c.Tree = getImplicitDecoder(paramType)
+
       val decExpr = {
-        val implicitDecoderForParam: c.Tree = getImplicitDecoder(paramType)
         cq"""$paramName =>
             c.downField($paramName).success.flatMap(_.as[$paramType]($implicitDecoderForParam).toOption).map($applyMethod)"""
       }
 
       val accDecExpr = {
-        val implicitDecoderForParam: c.Tree = getImplicitDecoder(paramType)
+        val decoderCopy = c.untypecheck(implicitDecoderForParam)
         cq"""$paramName =>
-          c.downField($paramName).success.map(x => $implicitDecoderForParam.accumulating(x).map($applyMethod))
+          c.downField($paramName).success.map(x => $decoderCopy.accumulating(x).map($applyMethod))
             .getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Attempt to decode value on failed cursor", c.history)))"""
       }
 
