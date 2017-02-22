@@ -116,14 +116,19 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       *
       * This is only supported for structs with <= 22 parameters, because of a limitation in cats.
       */
-    val accumulating: Tree = {
+    val accumulating: Option[Tree] = {
       if (params.length <= 22) {
         val validation = params.map(_._3).reduce { (acc: Tree, expr: Tree) =>
           q"""$acc.|@|($expr)"""
         }
-        q"""($validation) map ($apply)"""
+        Some(q"""
+          override def decodeAccumulating(cursor: _root_.io.circe.HCursor): _root_.io.circe.AccumulatingDecoder.Result[$A] = {
+            ($validation) map ($apply)
+          }
+        """)
       } else {
-        q"""_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Cannot generate AccumulatedDecoder for struct with 22 or more parameters", cursor.history))"""
+        c.warning(c.enclosingPosition, s"Decoder for ThriftStruct ${A.typeSymbol.name.toString} will not support accumulated errors for nested types because it has more than 22 parameters.")
+        None
       }
     }
 
@@ -134,9 +139,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
           for (..${params.map(_._2)}) yield $apply(..${params.map(_._1)})
         }
 
-        override def decodeAccumulating(cursor: _root_.io.circe.HCursor): _root_.io.circe.AccumulatingDecoder.Result[$A] = {
-          $accumulating
-        }
+        ${accumulating.getOrElse(q"")}
       }
     }"""
 
