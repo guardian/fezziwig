@@ -10,7 +10,7 @@ Installation
 ------------
 ```
 libraryDependencies ++= Seq(
-  "com.gu" %% "fezziwig" % "0.2.0"
+  "com.gu" %% "fezziwig" % "0.3"
 )
 ```
 
@@ -19,3 +19,10 @@ Usage
 ```
 import com.gu.fezziwig.CirceScroogeMacros._
 ``` 
+
+The generated decoders support accumulation of errors, e.g.
+```
+import com.gu.fezziwig.CirceScroogeMacros._
+val decoder = Decoder[MyThriftStruct]
+val result = decoder.accumulating(json.hcursor)
+```
