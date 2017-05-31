@@ -3,7 +3,7 @@ package com.gu.fezziwig
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
 import com.twitter.scrooge.{ThriftEnum, ThriftStruct, ThriftUnion}
-import io.circe.{ Decoder, Encoder}
+import io.circe.{Decoder, Encoder}
 import shapeless.{Lazy, |¬|}
 
 /**
@@ -155,10 +155,11 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     val typeName = A.typeSymbol.name.toString
     val valueOf = A.companion.member(TermName("valueOf"))
     val unknown = A.companion.member(TermName(s"EnumUnknown$typeName"))
+    val pattern = q"""_root_.java.util.regex.Pattern.compile("(-|_)")"""
 
     q"""
       _root_.io.circe.Decoder[String].map(value => {
-        val withoutSeparators = _root_.org.apache.commons.lang3.StringUtils.replaceChars(value, "-_", "")
+        val withoutSeparators = $pattern.matcher(value).replaceAll("");
         $valueOf(withoutSeparators).getOrElse($unknown.apply(-1))
       })
     """
