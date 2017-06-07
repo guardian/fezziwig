@@ -155,11 +155,10 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     val typeName = A.typeSymbol.name.toString
     val valueOf = A.companion.member(TermName("valueOf"))
     val unknown = A.companion.member(TermName(s"EnumUnknown$typeName"))
-    val pattern = q"""_root_.java.util.regex.Pattern.compile("(-|_)")"""
 
     q"""
       _root_.io.circe.Decoder[String].map(value => {
-        val withoutSeparators = $pattern.matcher(value).replaceAll("");
+        val withoutSeparators = value.filterNot(ch => ch == '_' || ch == '-')
         $valueOf(withoutSeparators).getOrElse($unknown.apply(-1))
       })
     """
