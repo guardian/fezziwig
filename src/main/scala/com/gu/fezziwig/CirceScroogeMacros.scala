@@ -3,7 +3,7 @@ package com.gu.fezziwig
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
 import com.twitter.scrooge.{ThriftEnum, ThriftStruct, ThriftUnion}
-import io.circe.{ Decoder, Encoder}
+import io.circe.{Decoder, Encoder}
 import shapeless.{Lazy, |¬|}
 
 /**
@@ -158,7 +158,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
     q"""
       _root_.io.circe.Decoder[String].map(value => {
-        val withoutSeparators = _root_.org.apache.commons.lang3.StringUtils.replaceChars(value, "-_", "")
+        val withoutSeparators = value.filterNot(ch => ch == '_' || ch == '-')
         $valueOf(withoutSeparators).getOrElse($unknown.apply(-1))
       })
     """
