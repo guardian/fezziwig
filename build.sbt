@@ -2,7 +2,8 @@ import sbt.Keys._
 import sbtrelease.ReleaseStateTransformations._
 
 name := "fezziwig"
-scalaVersion := "2.11.8"
+scalaVersion := "2.12.2"
+crossScalaVersions := Seq("2.11.8", scalaVersion.value)
 organization := "com.gu"
 
 val circeVersion = "0.8.0"
@@ -35,6 +36,11 @@ pomExtra := (
         <name>Luke Taylor</name>
         <url>https://github.com/LATaylor-guardian</url>
       </developer>
+      <developer>
+        <id>annebyrne</id>
+        <name>Anne Byrne</name>
+        <url>https://github.com/annebyrne</url>
+      </developer>
     </developers>
   )
 publishMavenStyle := true
@@ -62,9 +68,9 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
   "org.apache.thrift" % "libthrift" % "0.9.3",
-  "com.twitter" %% "scrooge-core" % "4.16.0",
+  "com.twitter" %% "scrooge-core" % "4.18.0",
   "io.circe" %% "circe-parser" % circeVersion % "test",
-  "org.scalatest" %% "scalatest" % "2.2.1" % "test",
+  "org.scalatest" %% "scalatest" % "3.0.3" % "test",
   "com.github.agourlay" %% "cornichon" % "0.10.4" % "test",
   "org.gnieh" %% "diffson-circe" % "2.1.1" % "test"
 )
