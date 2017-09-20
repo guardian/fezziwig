@@ -10,7 +10,7 @@ Installation
 ------------
 ```
 libraryDependencies ++= Seq(
-  "com.gu" %% "fezziwig" % "0.3"
+  "com.gu" %% "fezziwig" % "0.6"
 )
 ```
 
