@@ -86,7 +86,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
           val defaultValue = A.companion.member(TermName("apply$default$" + (i + 1)))
           fq"""$fresh <- $decodeParam.getOrElse(_root_.scala.Right($defaultValue))"""
         } else {
-          fq"""$fresh <- $decodeParam.getOrElse(_root_.scala.Left(_root_.io.circe.DecodingFailure("Missing field: " + ${name.toString}, Nil)))"""
+          fq"""$fresh <- $decodeParam.getOrElse(_root_.scala.Left(_root_.io.circe.DecodingFailure("Missing field: " + ${name.toString}, cursor.history)))"""
         }
       }
 
@@ -125,7 +125,8 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         }
         Some(q"""
           override def decodeAccumulating(cursor: _root_.io.circe.HCursor): _root_.io.circe.AccumulatingDecoder.Result[$A] = {
-            ($validation) map ($apply)
+            cursor.value.asObject.map(_ => ($validation) map ($apply))
+              .getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Expected an object", cursor.history)))
           }
         """)
       } else {
@@ -138,7 +139,10 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       new _root_.io.circe.Decoder[$A] {
         import cats.syntax.cartesian._
         def apply(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[$A] = {
-          for (..${params.map(_._2)}) yield $apply(..${params.map(_._1)})
+          for (..${
+            fq"""_ <- Either.fromOption(cursor.value.asObject, _root_.io.circe.DecodingFailure("Expected an object", cursor.history))""" +:
+              params.map(_._2)
+          }) yield $apply(..${params.map(_._1)})
         }
 
         ${accumulating.getOrElse(q"")}
