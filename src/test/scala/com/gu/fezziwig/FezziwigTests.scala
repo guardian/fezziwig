@@ -7,6 +7,7 @@ import io.circe.syntax._
 import io.circe.parser._
 import cats.syntax.either._
 import com.gu.fezziwig.CirceScroogeMacros._
+import io.circe.CursorOp.DownField
 
 class FezziwigTests extends FlatSpec with Matchers  {
 
@@ -32,7 +33,6 @@ class FezziwigTests extends FlatSpec with Matchers  {
   }
 
   it should "round-trip scrooge thrift models" in {
-
     val jsonString =
       """
         |{
@@ -48,6 +48,9 @@ class FezziwigTests extends FlatSpec with Matchers  {
         |  "e": "ENUM_A",
         |  "intMap": {
         |    "k": [2]
+        |  },
+        |  "x": {
+        |    "s": "x"
         |  }
         |}
       """.stripMargin
@@ -64,7 +67,13 @@ class FezziwigTests extends FlatSpec with Matchers  {
   }
 
   it should "accumulate errors" in {
-    //In the following json, the fields 's' and 'foo' have incorrect types
+    //In the following json, the fields 's', 'foo' and 'x' have incorrect types
+    val expectedFailures = List(
+      DecodingFailure("String", List(DownField("s"), DownField("c"), DownField("u"), DownField("b"))),
+      DecodingFailure("String", List(DownField("foo"))),
+      DecodingFailure("Expected an object", List(DownField("x")))
+    )
+
     val jsonString =
       """
         |{
@@ -80,7 +89,8 @@ class FezziwigTests extends FlatSpec with Matchers  {
         |  "e": "ENUM_A",
         |  "intMap": {
         |    "k": [2]
-        |  }
+        |  },
+        |  "x": 2
         |}
       """.stripMargin
 
@@ -91,6 +101,9 @@ class FezziwigTests extends FlatSpec with Matchers  {
     val result = dec.accumulating(jsonBefore.hcursor)
 
     result.isInvalid should be(true)
-    result.swap.foreach(nel => nel.toList.length should be(2))
+    result.swap.foreach(nel => {
+      nel.toList.length should be(3)
+      nel.toList should be(expectedFailures)
+    })
   }
 }

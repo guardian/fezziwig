@@ -28,4 +28,5 @@ struct StructA {
   3: optional i32 bar
   4: required Enum e
   5: required map<string, list<i32>> intMap
+  7: optional StructC x
 }
