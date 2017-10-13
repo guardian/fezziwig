@@ -67,7 +67,7 @@ resolvers += Resolver.sonatypeRepo("releases")
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
-  "org.apache.thrift" % "libthrift" % "0.9.3",
+  "org.apache.thrift" % "libthrift" % "0.9.1",
   "com.twitter" %% "scrooge-core" % "4.18.0",
   "io.circe" %% "circe-parser" % circeVersion % "test",
   "org.scalatest" %% "scalatest" % "3.0.3" % "test",
