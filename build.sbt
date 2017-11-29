@@ -6,7 +6,7 @@ scalaVersion := "2.12.4"
 crossScalaVersions := Seq("2.11.11", scalaVersion.value)
 organization := "com.gu"
 
-val circeVersion = "0.8.0"
+val circeVersion = "0.9.0-M2"
 
 pomExtra := (
   <url>https://github.com/guardian/fezziwig</url>
