@@ -8,6 +8,9 @@ organization := "com.gu"
 
 val circeVersion = "0.9.0-M2"
 
+publishTo :=
+  Some(if (isSnapshot.value) Opts.resolver.sonatypeSnapshots else Opts.resolver.sonatypeStaging)
+
 pomExtra := (
   <url>https://github.com/guardian/fezziwig</url>
     <scm>
@@ -56,7 +59,7 @@ releaseProcess := Seq(
   setReleaseVersion,
   commitReleaseVersion,
   tagRelease,
-  releaseStepCommandAndRemaining("publish"),
+  publishArtifacts,
   setNextVersion,
   commitNextVersion,
   releaseStepCommand("sonatypeReleaseAll"),
