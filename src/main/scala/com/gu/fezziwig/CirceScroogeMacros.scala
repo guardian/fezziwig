@@ -113,19 +113,21 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     }
 
     /**
-      * Accumulate cats Validated results using cartesian |@| operator, e.g.
-      * (expr1 |@| expr2 |@| ...) map (apply)
-      *
-      * This is only supported for structs with <= 22 parameters, because of a limitation in cats.
+      * Accumulate cats Validated results.
+      * This is only supported for structs with <= 22 parameters.
       */
     val accumulating: Option[Tree] = {
       if (params.length <= 22) {
-        val validation = params.map(_._3).reduce { (acc: Tree, expr: Tree) =>
-          q"""$acc.|@|($expr)"""
+
+        val validationExpression = params.map(_._3) match {
+          case a :: Nil => q"""$a.map($apply)"""  //Tuple1 is not supported
+          case Nil => q"""$apply"""
+          case exprs => q"""(..$exprs).mapN($apply)"""
         }
+
         Some(q"""
           override def decodeAccumulating(cursor: _root_.io.circe.HCursor): _root_.io.circe.AccumulatingDecoder.Result[$A] = {
-            cursor.value.asObject.map(_ => ($validation) map ($apply))
+            cursor.value.asObject.map(_ => $validationExpression)
               .getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Expected an object", cursor.history)))
           }
         """)
@@ -137,7 +139,8 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
     q"""{
       new _root_.io.circe.Decoder[$A] {
-        import cats.syntax.cartesian._
+        import cats.syntax.apply._
+        import cats.syntax.either._
         def apply(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[$A] = {
           for (..${
             fq"""_ <- Either.fromOption(cursor.value.asObject, _root_.io.circe.DecodingFailure("Expected an object", cursor.history))""" +:

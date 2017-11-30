@@ -11,27 +11,6 @@ import io.circe.CursorOp.DownField
 
 class FezziwigTests extends FlatSpec with Matchers  {
 
-  /**
-    * TODO - Currently the macros cannot handle thrift map types. There must be some shapeless magic we can do to fix this.
-    *
-    * Circe provides decodeMapLike and encodeMapLike, meaning we can find implicit Map decoders/encoders from here.
-    * But the macros cannot find them when generating the scrooge decoders/encoders.
-    *
-    * So for now the following two implicits are needed for the test to pass :(
-    */
-  implicit def intMapEncoder = Encoder.instance[scala.collection.Map[String,Seq[Int]]] { s =>
-    val fields = s.toList.map {
-      case (k, v) => k -> Json.fromValues(v.map(_.asJson))
-    }
-    Json.fromFields(fields)
-  }
-
-  implicit def intMapDecoder = Decoder.instance[scala.collection.Map[String,Seq[Int]]] { c =>
-    import cats.syntax.either._
-    val result: Map[String, Seq[Int]] = Map("k" -> Seq(2))  //cheat!
-    Either.right(result)
-  }
-
   it should "round-trip scrooge thrift models" in {
     val jsonString =
       """
