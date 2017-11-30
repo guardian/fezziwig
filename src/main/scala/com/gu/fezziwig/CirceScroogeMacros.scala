@@ -228,7 +228,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
       val decExpr = {
         cq"""$paramName =>
-            c.downField($paramName).success.flatMap(_.as[$paramType]($implicitDecoderForParam).toOption).map($applyMethod)"""
+            c.downField($paramName).success.map(_.as[$paramType]($implicitDecoderForParam).map($applyMethod))"""
       }
 
       val accDecExpr = {
@@ -245,17 +245,17 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     q"""{
       new _root_.io.circe.Decoder[$A] {
         def apply(c: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[$A] = {
-          val result = c.fields.getOrElse(Nil).headOption.flatMap {
+          val result: Option[_root_.io.circe.Decoder.Result[$A]] = c.fields.getOrElse(Nil).headOption.flatMap {
             case ..${decoderCases._1 ++ Seq(cq"""_ => _root_.scala.None""")}
           }
-          Either.fromOption(result, _root_.io.circe.DecodingFailure(${A.typeSymbol.fullName}, c.history))
+          result.getOrElse(Either.left(_root_.io.circe.DecodingFailure("Missing field under union: "+ ${A.typeSymbol.fullName}, c.history)))
         }
 
         override def decodeAccumulating(c: _root_.io.circe.HCursor): _root_.io.circe.AccumulatingDecoder.Result[$A] = {
           val result = c.fields.getOrElse(Nil).headOption.map {
-            case ..${decoderCases._2 ++ Seq(cq"""_ => _root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure(${A.typeSymbol.fullName}, c.history))""")}
+            case ..${decoderCases._2 ++ Seq(cq"""_ => _root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Unknown param in union: "+ ${A.typeSymbol.fullName}, c.history))""")}
           }
-          result.getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure(${A.typeSymbol.fullName}, c.history)))
+          result.getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Missing field under union: "+ ${A.typeSymbol.fullName}, c.history)))
         }
       }
     }"""
