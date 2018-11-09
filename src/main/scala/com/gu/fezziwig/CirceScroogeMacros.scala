@@ -245,14 +245,14 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     q"""{
       new _root_.io.circe.Decoder[$A] {
         def apply(c: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[$A] = {
-          val result: Option[_root_.io.circe.Decoder.Result[$A]] = c.fields.getOrElse(Nil).headOption.flatMap {
+          val result: Option[_root_.io.circe.Decoder.Result[$A]] = c.keys.getOrElse(Nil).headOption.flatMap {
             case ..${decoderCases._1 ++ Seq(cq"""_ => _root_.scala.None""")}
           }
           result.getOrElse(Either.left(_root_.io.circe.DecodingFailure("Missing field under union: "+ ${A.typeSymbol.fullName}, c.history)))
         }
 
         override def decodeAccumulating(c: _root_.io.circe.HCursor): _root_.io.circe.AccumulatingDecoder.Result[$A] = {
-          val result = c.fields.getOrElse(Nil).headOption.map {
+          val result = c.keys.getOrElse(Nil).headOption.map {
             case ..${decoderCases._2 ++ Seq(cq"""_ => _root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Unknown param in union: "+ ${A.typeSymbol.fullName}, c.history))""")}
           }
           result.getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Missing field under union: "+ ${A.typeSymbol.fullName}, c.history)))
