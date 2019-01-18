@@ -12,6 +12,12 @@ publishTo :=
   Some(if (isSnapshot.value) Opts.resolver.sonatypeSnapshots else Opts.resolver.sonatypeStaging)
 
 pomExtra := (
+    <url>https://github.com/guardian/fezziwig</url>
+    <scm>
+      <connection>scm:git:git@github.com:guardian/fezziwig.git</connection>
+      <developerConnection>scm:git:git@github.com:guardian/fezziwig.git</developerConnection>
+      <url>git@github.com:guardian/fezziwig.git</url>
+    </scm>
     <developers>
       <developer>
         <id>tomrf1</id>
