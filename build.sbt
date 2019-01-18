@@ -56,7 +56,7 @@ releaseProcess := Seq(
   publishArtifacts,
   setNextVersion,
   commitNextVersion,
-  releaseStepCommand("sonatypeReleaseAll"),
+  releaseStepCommand("sonatypeRelease"),
   pushChanges
 )
 resolvers += Resolver.sonatypeRepo("releases")
