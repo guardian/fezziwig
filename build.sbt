@@ -2,11 +2,11 @@ import sbt.Keys._
 import sbtrelease.ReleaseStateTransformations._
 
 name := "fezziwig"
-scalaVersion := "2.12.4"
-crossScalaVersions := Seq("2.11.11", scalaVersion.value)
+scalaVersion := "2.12.8"
+crossScalaVersions := Seq("2.11.12", scalaVersion.value)
 organization := "com.gu"
 
-val circeVersion = "0.10.0"
+val circeVersion = "0.11.1"
 
 publishTo :=
   Some(if (isSnapshot.value) Opts.resolver.sonatypeSnapshots else Opts.resolver.sonatypeStaging)
