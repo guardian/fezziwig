@@ -2,11 +2,11 @@ import sbt.Keys._
 import sbtrelease.ReleaseStateTransformations._
 
 name := "fezziwig"
-scalaVersion := "2.12.8"
-crossScalaVersions := Seq("2.11.12", scalaVersion.value)
+scalaVersion := "2.13.1"
+crossScalaVersions := Seq("2.11.12", "2.12.10", scalaVersion.value)
 organization := "com.gu"
 
-val circeVersion = "0.11.1"
+val circeVersion = "0.12.1"
 
 publishTo :=
   Some(if (isSnapshot.value) Opts.resolver.sonatypeSnapshots else Opts.resolver.sonatypeStaging)
@@ -51,11 +51,10 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
   "org.apache.thrift" % "libthrift" % "0.12.0",
-  "com.twitter" %% "scrooge-core" % "19.3.0",
+  "com.twitter" %% "scrooge-core" % "19.9.0",
   "io.circe" %% "circe-parser" % circeVersion % "test",
-  "org.scalatest" %% "scalatest" % "3.0.3" % "test",
-  "com.github.agourlay" %% "cornichon" % "0.10.4" % "test",
-  "org.gnieh" %% "diffson-circe" % "2.1.1" % "test"
+  "org.scalatest" %% "scalatest" % "3.0.8" % "test",
+  "org.gnieh" %% "diffson-circe" % "4.0.0-M5" % "test"
 )
 
 //For tests
