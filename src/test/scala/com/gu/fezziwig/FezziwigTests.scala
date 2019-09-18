@@ -1,7 +1,10 @@
 package com.gu.fezziwig
 
 import org.scalatest.{FlatSpec, Matchers}
-import gnieh.diffson.circe._
+import diffson._
+import diffson.circe._
+import diffson.jsonpatch._
+import diffson.jsonpatch.simplediff._
 import io.circe._
 import io.circe.syntax._
 import io.circe.parser._
@@ -40,9 +43,9 @@ class FezziwigTests extends FlatSpec with Matchers  {
 
     val jsonAfter: Json = decoded.asJson
 
-    val diff = JsonDiff.diff(jsonBefore, jsonAfter, false)
-    if (diff != JsonPatch(Nil)) println(s"${diff.toString}")
-    diff should be(JsonPatch(Nil))
+    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
+    if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
+    diffJ should be(JsonPatch(Nil))
   }
 
   it should "accumulate errors" in {
