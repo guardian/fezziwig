@@ -3,7 +3,7 @@ import sbtrelease.ReleaseStateTransformations._
 
 name := "fezziwig"
 scalaVersion := "2.13.1"
-crossScalaVersions := Seq("2.11.12", "2.12.10", scalaVersion.value)
+crossScalaVersions := Seq("2.12.10", scalaVersion.value)
 organization := "com.gu"
 
 val circeVersion = "0.12.1"
