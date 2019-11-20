@@ -99,7 +99,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
         val accDecodeParam =
           q"""cursor.downField(${name.toString}).success
-            .map(x => $decoderCopy.accumulating(x))"""
+            .map(x => $decoderCopy.decodeAccumulating(x))"""
 
         if (param.asTerm.isParamWithDefault) {
           val defaultValue = A.companion.member(TermName("apply$default$" + (i + 1)))
@@ -126,7 +126,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         }
 
         Some(q"""
-          override def decodeAccumulating(cursor: _root_.io.circe.HCursor): _root_.io.circe.AccumulatingDecoder.Result[$A] = {
+          override def decodeAccumulating(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.AccumulatingResult[$A] = {
             cursor.value.asObject.map(_ => $validationExpression)
               .getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Expected an object", cursor.history)))
           }
@@ -235,7 +235,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         val decoderCopy = c.untypecheck(implicitDecoderForParam)
 
         cq"""$paramName =>
-          c.downField($paramName).success.map(x => $decoderCopy.accumulating(x).map($applyMethod))
+          c.downField($paramName).success.map(x => $decoderCopy.decodeAccumulating(x).map($applyMethod))
             .getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Unable to find " + $paramName, c.history)))"""
       }
 
@@ -251,7 +251,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
           result.getOrElse(Either.left(_root_.io.circe.DecodingFailure("Missing field under union: "+ ${A.typeSymbol.fullName}, c.history)))
         }
 
-        override def decodeAccumulating(c: _root_.io.circe.HCursor): _root_.io.circe.AccumulatingDecoder.Result[$A] = {
+        override def decodeAccumulating(c: _root_.io.circe.HCursor): _root_.io.circe.Decoder.AccumulatingResult[$A] = {
           val result = c.keys.getOrElse(Nil).headOption.map {
             case ..${decoderCases._2 ++ Seq(cq"""_ => _root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Unknown param in union: "+ ${A.typeSymbol.fullName}, c.history))""")}
           }
