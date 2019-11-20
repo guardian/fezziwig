@@ -80,7 +80,7 @@ class FezziwigTests extends FlatSpec with Matchers  {
 
     val jsonBefore: Json = parse(jsonString).toOption.get
 
-    val result = dec.accumulating(jsonBefore.hcursor)
+    val result = dec.decodeAccumulating(jsonBefore.hcursor)
 
     result.isInvalid should be(true)
     result.swap.foreach(nel => {

@@ -1,5 +1,4 @@
 import sbt.Keys._
-import sbtrelease.ReleaseStateTransformations._
 
 name := "fezziwig"
 scalaVersion := "2.13.1"
@@ -7,9 +6,6 @@ crossScalaVersions := Seq("2.12.10", scalaVersion.value)
 organization := "com.gu"
 
 val circeVersion = "0.12.1"
-
-publishTo :=
-  Some(if (isSnapshot.value) Opts.resolver.sonatypeSnapshots else Opts.resolver.sonatypeStaging)
 
 publishMavenStyle := true
 publishArtifact in Test := false
@@ -31,7 +27,12 @@ developers := List(
   Developer(id = "annebyrne", name = "Anne Byrne", email = "", url = url("https://github.com/annebyrne"))
 )
 
-releaseProcess := Seq(
+publishTo := sonatypePublishToBundle.value
+
+import ReleaseTransformations._
+
+releaseCrossBuild := true // true if you cross-build the project for multiple Scala versions
+releaseProcess := Seq[ReleaseStep](
   checkSnapshotDependencies,
   inquireVersions,
   runClean,
@@ -39,10 +40,11 @@ releaseProcess := Seq(
   setReleaseVersion,
   commitReleaseVersion,
   tagRelease,
-  publishArtifacts,
+  // For non cross-build projects, use releaseStepCommand("publishSigned")
+  releaseStepCommandAndRemaining("+publishSigned"),
+  releaseStepCommand("sonatypeBundleRelease"),
   setNextVersion,
   commitNextVersion,
-  releaseStepCommand("sonatypeRelease"),
   pushChanges
 )
 resolvers += Resolver.sonatypeRepo("releases")
@@ -50,11 +52,11 @@ resolvers += Resolver.sonatypeRepo("releases")
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
-  "org.apache.thrift" % "libthrift" % "0.12.0",
-  "com.twitter" %% "scrooge-core" % "19.9.0",
+  "org.apache.thrift" % "libthrift" % "0.13.0",
+  "com.twitter" %% "scrooge-core" % "19.11.0",
   "io.circe" %% "circe-parser" % circeVersion % "test",
   "org.scalatest" %% "scalatest" % "3.0.8" % "test",
-  "org.gnieh" %% "diffson-circe" % "4.0.0-M5" % "test"
+  "org.gnieh" %% "diffson-circe" % "4.0.0" % "test"
 )
 
 //For tests
