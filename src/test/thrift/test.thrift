@@ -8,7 +8,7 @@ struct StructD {
   1: required string s
 }
 
-union Union {
+union Union1 {
   1: StructC c
   2: StructD d
 }
@@ -19,7 +19,7 @@ enum Enum {
 }
 
 struct StructB {
-  1: required Union u
+  1: required Union1 u
 }
 
 struct StructA {
