@@ -1,18 +1,18 @@
 package com.gu.fezziwig
 
-import org.scalatest.{FlatSpec, Matchers}
+import com.gu.fezziwig.CirceScroogeMacros._
 import diffson._
 import diffson.circe._
 import diffson.jsonpatch._
 import diffson.jsonpatch.simplediff._
-import io.circe._
-import io.circe.syntax._
-import io.circe.parser._
-import cats.syntax.either._
-import com.gu.fezziwig.CirceScroogeMacros._
 import io.circe.CursorOp.DownField
+import io.circe._
+import io.circe.parser._
+import io.circe.syntax._
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class FezziwigTests extends FlatSpec with Matchers  {
+class FezziwigTests extends AnyFlatSpec with Matchers  {
 
   it should "round-trip scrooge thrift models" in {
     val jsonString =
