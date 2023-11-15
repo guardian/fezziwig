@@ -8,4 +8,3 @@ jobs:
       - uses: guardian/actions-sbt-release@pmr/wip
         with:
           fetchDepth: 0
-          isSnapshot: false
