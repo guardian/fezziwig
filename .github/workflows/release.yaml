@@ -6,3 +6,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: guardian/actions-sbt-release@pmr/wip
+        with:
+          fetchDepth: 0
