@@ -3,6 +3,5 @@ on:
   - workflow_dispatch
 jobs:
   sbt_release:
-    runs-on: ubuntu-latest
     steps:
-      - run: 'echo hello world'
+      - uses: guardian/actions-sbt-release@pmr/wip
