@@ -3,5 +3,6 @@ on:
   - workflow_dispatch
 jobs:
   sbt_release:
+    runs-on: ubuntu-latest
     steps:
       - uses: guardian/actions-sbt-release@pmr/wip
