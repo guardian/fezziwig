@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       isSnapshot:
-        description: is snapshot release
+        description: Produce a snapshot release
         required: true
         default: true
         type: boolean
