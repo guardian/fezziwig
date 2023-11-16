@@ -1,6 +1,12 @@
 name: 'Publish Release'
 on:
-  - workflow_dispatch
+  workflow_dispatch:
+    inputs:
+      isSnapshot:
+        description: is snapshot release
+        required: true
+        default: true
+        type: boolean
 jobs:
   sbt_release:
     runs-on: ubuntu-latest
@@ -10,4 +16,4 @@ jobs:
           fetchDepth: 0
           pgpSecret: ${{ secrets.PGP_SECRET }}
           pgpPassphrase: ${{ secrets.PGP_PASSPHRASE }}
-          # isSnapshot: false
+          isSnapshot: ${{ inputs.isSnapshot }}
