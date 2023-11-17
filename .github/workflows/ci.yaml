@@ -1,0 +1,12 @@
+name: CI
+
+# it's not really possible to test workflows without first having them
+# exist in the default branch (i.e. main).
+
+on: [workflow_dispatch]
+
+jobs:
+  example:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo example
