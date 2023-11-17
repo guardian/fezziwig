@@ -42,7 +42,8 @@ releaseProcess := Seq[ReleaseStep](
   releaseStepCommand("sonatypeBundleRelease"),
   setNextVersion
 )
-resolvers += Resolver.sonatypeRepo("releases")
+
+resolvers ++= Resolver.sonatypeOssRepos("snapshots")
 
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
