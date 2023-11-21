@@ -36,6 +36,7 @@ releaseCrossBuild := true // true if you cross-build the project for multiple Sc
 lazy val commonReleaseProcess = Seq[ReleaseStep](
   checkSnapshotDependencies,
   inquireVersions,
+  setReleaseVersion,
   runClean,
   runTest,
   // For non cross-build projects, use releaseStepCommand("publishSigned")
@@ -44,7 +45,6 @@ lazy val commonReleaseProcess = Seq[ReleaseStep](
 
 lazy val productionReleaseProcess = commonReleaseProcess ++ Seq[ReleaseStep](
   releaseStepCommand("sonatypeBundleRelease"),
-  setNextVersion
 )
 
 lazy val snapshotReleaseProcess = commonReleaseProcess
