@@ -61,7 +61,7 @@ resolvers ++= Resolver.sonatypeOssRepos("snapshots")
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
-  "org.apache.thrift" % "libthrift" % "0.15.0",
+  "org.apache.thrift" % "libthrift" % "0.19.0",
   "com.twitter" %% "scrooge-core" % "21.8.0",
   "io.circe" %% "circe-parser" % circeVersion % "test",
   "org.scalatest" %% "scalatest" % "3.2.9" % "test",
