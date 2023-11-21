@@ -1,17 +1,7 @@
 name: 'Publish Release'
 on:
-  workflow_dispatch:
-    inputs:
-      isSnapshot:
-        description: Produce a snapshot release
-        required: true
-        default: true
-        type: boolean
-      versionOverride:
-        description: Override version (empty means use tags)
-        type: string
-        default: ''
-        required: false
+  release:
+    types: [published]
 jobs:
   sbt_release:
     runs-on: ubuntu-latest
@@ -23,5 +13,4 @@ jobs:
           pgpPassphrase: ${{ secrets.PGP_PASSPHRASE }}
           sonatypeUsername: ${{ secrets.SONATYPE_USERNAME }}
           sonatypePassword: ${{ secrets.SONATYPE_PASSWORD }}
-          isSnapshot: ${{ inputs.isSnapshot }}
-          version: ${{ inputs.versionOverride }}
+          isSnapshot: ${{ github.event.release.prerelease }}
