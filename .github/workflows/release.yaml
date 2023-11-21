@@ -7,6 +7,11 @@ on:
         required: true
         default: true
         type: boolean
+      versionOverride:
+        description: Override version (empty means use tags)
+        type: string
+        default: ''
+        required: false
 jobs:
   sbt_release:
     runs-on: ubuntu-latest
@@ -19,3 +24,4 @@ jobs:
           sonatypeUsername: ${{ secrets.SONATYPE_USERNAME }}
           sonatypePassword: ${{ secrets.SONATYPE_PASSWORD }}
           isSnapshot: ${{ inputs.isSnapshot }}
+          version: ${{ inputs.versionOverride }}
