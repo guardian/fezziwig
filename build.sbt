@@ -40,11 +40,11 @@ lazy val commonReleaseProcess = Seq[ReleaseStep](
   runTest,
   // For non cross-build projects, use releaseStepCommand("publishSigned")
   releaseStepCommandAndRemaining("+publishSigned"),
+  setReleaseVersion,
 )
 
 lazy val productionReleaseProcess = commonReleaseProcess ++ Seq[ReleaseStep](
   releaseStepCommand("sonatypeBundleRelease"),
-  setNextVersion
 )
 
 lazy val snapshotReleaseProcess = commonReleaseProcess
