@@ -32,22 +32,31 @@ publishTo := sonatypePublishToBundle.value
 import ReleaseTransformations._
 
 releaseCrossBuild := true // true if you cross-build the project for multiple Scala versions
-releaseProcess := Seq[ReleaseStep](
+
+lazy val commonReleaseProcess = Seq[ReleaseStep](
   checkSnapshotDependencies,
   inquireVersions,
   runClean,
   runTest,
-  setReleaseVersion,
-  commitReleaseVersion,
-  tagRelease,
   // For non cross-build projects, use releaseStepCommand("publishSigned")
   releaseStepCommandAndRemaining("+publishSigned"),
-  releaseStepCommand("sonatypeBundleRelease"),
-  setNextVersion,
-  commitNextVersion,
-  pushChanges
 )
-resolvers += Resolver.sonatypeRepo("releases")
+
+lazy val productionReleaseProcess = commonReleaseProcess ++ Seq[ReleaseStep](
+  releaseStepCommand("sonatypeBundleRelease"),
+  setNextVersion
+)
+
+lazy val snapshotReleaseProcess = commonReleaseProcess
+
+releaseProcess := {
+  sys.props.get("RELEASE_TYPE") match {
+    case Some("production") => productionReleaseProcess
+    case _ => snapshotReleaseProcess
+  }
+}
+
+resolvers ++= Resolver.sonatypeOssRepos("snapshots")
 
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
