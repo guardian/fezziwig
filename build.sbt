@@ -36,11 +36,11 @@ releaseCrossBuild := true // true if you cross-build the project for multiple Sc
 lazy val commonReleaseProcess = Seq[ReleaseStep](
   checkSnapshotDependencies,
   inquireVersions,
+  setReleaseVersion,
   runClean,
   runTest,
   // For non cross-build projects, use releaseStepCommand("publishSigned")
   releaseStepCommandAndRemaining("+publishSigned"),
-  setReleaseVersion,
 )
 
 lazy val productionReleaseProcess = commonReleaseProcess ++ Seq[ReleaseStep](
