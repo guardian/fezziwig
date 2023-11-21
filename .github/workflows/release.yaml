@@ -16,7 +16,7 @@ jobs:
   sbt_release:
     runs-on: ubuntu-latest
     steps:
-      - uses: guardian/actions-sbt-release@main
+      - uses: guardian/actions-sbt-release@v2
         with:
           fetchDepth: 0
           pgpSecret: ${{ secrets.PGP_SECRET }}
