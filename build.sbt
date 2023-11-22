@@ -56,8 +56,6 @@ releaseProcess := {
   }
 }
 
-resolvers ++= Resolver.sonatypeOssRepos("snapshots")
-
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
