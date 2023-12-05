@@ -2,4 +2,3 @@
 target/*
 project/target/*
 project/project/target/*
-version.sbt
