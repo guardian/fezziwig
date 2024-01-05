@@ -1,8 +1,7 @@
 Fezziwig
 ========
 
-
-[![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.gu/fezziwig_2.13/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.gu/fezziwig_2.13)
+[![fezziwig Scala version support](https://index.scala-lang.org/guardian/fezziwig/fezziwig/latest-by-scala-version.svg?platform=jvm)](https://index.scala-lang.org/guardian/fezziwig/fezziwig)
 
 [Fezziwig](https://en.wikipedia.org/wiki/Mr._Fezziwig) is a library for compile time generation of [Circe](https://github.com/circe/circe) encoders/decoders for [Scrooge](https://twitter.github.io/scrooge/)-generated classes representing [Thrift](http://thrift.apache.org/) objects.
 
