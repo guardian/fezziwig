@@ -1,5 +1,6 @@
-.idea/*
-target/*
-project/target/*
-project/project/target/*
-version.sbt
+# sbt specific
+.bsp/
+target/
+
+# Scala-IDE specific
+.idea
