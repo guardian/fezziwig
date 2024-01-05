@@ -1,4 +1,5 @@
-import sbt.Keys._
+import ReleaseTransformations.*
+import sbtversionpolicy.withsbtrelease.ReleaseVersion
 
 name := "fezziwig"
 scalaVersion := "2.13.6"
@@ -7,54 +8,23 @@ organization := "com.gu"
 
 val circeVersion = "0.14.1"
 
-publishMavenStyle := true
-Test / publishArtifact := false
-pomIncludeRepository := { _ => false }
-releasePublishArtifactsAction := PgpKeys.publishSigned.value
-licenses := Seq("Apache v2" -> url("http://www.apache.org/licenses/LICENSE-2.0.html"))
-homepage := Some(url("https://github.com/guardian/fezziwig"))
-scmInfo := Some(
-  ScmInfo(
-    url("https://github.com/guardian/fezziwig"),
-    "scm:git@github.com:guardian/fezziwig.git"
-  )
-)
-developers := List(
-  Developer(id = "tomrf1", name = "Tom Forbes", email = "", url = url("https://github.com/tomrf1")),
-  Developer(id = "cb372", name = "Chris Birchall", email = "", url = url("https://github.com/cb372")),
-  Developer(id = "mchv", name = "Mariot Chauvin", email = "", url = url("https://github.com/mchv")),
-  Developer(id = "LATaylor-guardian", name = "Luke Taylor", email = "", url = url("https://github.com/LATaylor-guardian")),
-  Developer(id = "annebyrne", name = "Anne Byrne", email = "", url = url("https://github.com/annebyrne"))
-)
+licenses := Seq(License.Apache2)
 
-publishTo := sonatypePublishToBundle.value
-
-import ReleaseTransformations._
+releaseVersion := ReleaseVersion.fromAggregatedAssessedCompatibilityWithLatestRelease().value
 
 releaseCrossBuild := true // true if you cross-build the project for multiple Scala versions
 
-lazy val commonReleaseProcess = Seq[ReleaseStep](
+releaseProcess := Seq[ReleaseStep](
   checkSnapshotDependencies,
   inquireVersions,
-  setReleaseVersion,
   runClean,
   runTest,
-  // For non cross-build projects, use releaseStepCommand("publishSigned")
-  releaseStepCommandAndRemaining("+publishSigned"),
+  setReleaseVersion,
+  commitReleaseVersion,
+  tagRelease,
+  setNextVersion,
+  commitNextVersion
 )
-
-lazy val productionReleaseProcess = commonReleaseProcess ++ Seq[ReleaseStep](
-  releaseStepCommand("sonatypeBundleRelease"),
-)
-
-lazy val snapshotReleaseProcess = commonReleaseProcess
-
-releaseProcess := {
-  sys.props.get("RELEASE_TYPE") match {
-    case Some("production") => productionReleaseProcess
-    case _ => snapshotReleaseProcess
-  }
-}
 
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
