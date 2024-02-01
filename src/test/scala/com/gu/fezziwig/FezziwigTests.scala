@@ -88,4 +88,8 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
       nel.toList should be(expectedFailures)
     })
   }
+
+  it should "handle recursive type without crashing" in {
+    Decoder[RecursiveStruct]
+  }
 }

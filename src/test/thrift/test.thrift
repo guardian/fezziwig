@@ -30,3 +30,8 @@ struct StructA {
   5: required map<string, list<i32>> intMap
   7: optional StructC x
 }
+
+struct RecursiveStruct {
+    1: required string foo
+    2: optional RecursiveStruct recursiveStruct
+}
