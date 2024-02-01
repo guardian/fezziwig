@@ -72,7 +72,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
 
       val decoder: c.Tree = {
-        // If this is a recursive optional field then reference `this`
+        // If this is a recursive optional field then decode using `this`
         if (tpe.typeSymbol.fullName == "scala.Option" && tpe.typeArgs.headOption.contains(A)) {
           println(s"recursive type: $name")
           q"io.circe.Decoder.decodeOption[${tpe.typeArgs.head}](this)"
@@ -286,13 +286,30 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         case other => (other, false)
       }
 
-      val implicitEncoder: c.Tree = getImplicitEncoder(tpe)
+      val encoder: c.Tree = {
+        // if this is a recursive optional field then encode using `this`
+        if (isOption && tpe == A) {
+          q"this"
+        } else {
+          getImplicitEncoder(tpe)
+        }
+      }
 
-      if (isOption) q"""thrift.${name.toTermName}.map(${name.toString} -> $implicitEncoder.apply(_))"""
-      else q"""_root_.scala.Some(${name.toString} -> $implicitEncoder.apply(thrift.${name.toTermName}))"""
+      if (isOption) q"""thrift.${name.toTermName}.map(${name.toString} -> $encoder.apply(_))"""
+      else q"""_root_.scala.Some(${name.toString} -> $encoder.apply(thrift.${name.toTermName}))"""
     }
 
-    q"""{ _root_.io.circe.Encoder.instance((thrift: $A) => _root_.io.circe.Json.fromFields($pairs.flatten)) }"""
+    val r =
+      q"""{
+         new _root_.io.circe.Encoder[$A] {
+            def apply(thrift: $A): _root_.io.circe.Json = {
+              _root_.io.circe.Json.fromFields($pairs.flatten)
+            }
+          }
+       }"""
+
+    println(r)
+    r
   }
 
   /**

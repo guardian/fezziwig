@@ -90,6 +90,9 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
   }
 
   it should "handle recursive type without crashing" in {
+    implicit val dec = Decoder[RecursiveStruct]
+    implicit val enc = Encoder[RecursiveStruct]
+
     val jsonString =
       """
         |{
