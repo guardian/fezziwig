@@ -89,7 +89,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
     })
   }
 
-  it should "handle recursive type without crashing" in {
+  it should "round-trip recursive structs" in {
     implicit val dec = Decoder[RecursiveStruct]
     implicit val enc = Encoder[RecursiveStruct]
 
