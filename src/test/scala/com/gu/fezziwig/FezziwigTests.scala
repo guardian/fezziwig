@@ -90,6 +90,24 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
   }
 
   it should "handle recursive type without crashing" in {
-    Decoder[RecursiveStruct]
+    val jsonString =
+      """
+        |{
+        |  "foo": "outer-foo",
+        |  "recursiveStruct": {
+        |    "foo": "nested-foo"
+        |  }
+        |}
+      """.stripMargin
+
+    val jsonBefore: Json = parse(jsonString).toOption.get
+
+    val decoded: RecursiveStruct = jsonBefore.as[RecursiveStruct].toOption.get
+
+    val jsonAfter: Json = decoded.asJson
+
+    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
+    if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
+    diffJ should be(JsonPatch(Nil))
   }
 }

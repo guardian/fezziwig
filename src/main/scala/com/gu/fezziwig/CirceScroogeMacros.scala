@@ -70,12 +70,21 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       val tpe = param.typeSignature
       val fresh = c.freshName(name)
 
-      val implicitDecoder: c.Tree = getImplicitDecoder(tpe)
+
+      val decoder: c.Tree = {
+        // If this is a recursive optional field then reference `this`
+        if (tpe.typeSymbol.fullName == "scala.Option" && tpe.typeArgs.headOption.contains(A)) {
+          println(s"recursive type: $name")
+          q"io.circe.Decoder.decodeOption[${tpe.typeArgs.head}](this)"
+        } else {
+          getImplicitDecoder(tpe)
+        }
+      }
 
       val decodeExpr = {
         val decodeParam =
           q"""cursor.downField(${name.toString}).success
-            .map(x => x.as[$tpe]($implicitDecoder))"""
+            .map(x => x.as[$tpe]($decoder))"""
 
         if (param.asTerm.isParamWithDefault) {
           /**
@@ -95,7 +104,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
           * If we try to use the same tree twice, the compiler may blow up with the following helpful error message:
           *   `scala.reflect.internal.Types$TypeError: value <none> is not a member of com.gu.fezziwig.FezziwigTests`
           */
-        val decoderCopy = c.untypecheck(implicitDecoder)
+        val decoderCopy = c.untypecheck(decoder)
 
         val accDecodeParam =
           q"""cursor.downField(${name.toString}).success
@@ -137,7 +146,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       }
     }
 
-    q"""{
+    val r = q"""{
       new _root_.io.circe.Decoder[$A] {
         import cats.syntax.apply._
         import cats.syntax.either._
@@ -151,6 +160,8 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         ${accumulating.getOrElse(q"")}
       }
     }"""
+    println(r)
+    r
 
   }
 
