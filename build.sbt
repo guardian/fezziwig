@@ -5,7 +5,6 @@ name := "fezziwig"
 scalaVersion := "2.13.6"
 crossScalaVersions := Seq("2.12.10", scalaVersion.value)
 organization := "com.gu"
-scalacOptions += "-Ymacro-debug-lite"
 
 val circeVersion = "0.14.1"
 
