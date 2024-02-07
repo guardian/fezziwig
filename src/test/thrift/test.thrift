@@ -30,3 +30,13 @@ struct StructA {
   5: required map<string, list<i32>> intMap
   7: optional StructC x
 }
+
+struct OuterStruct {
+    1: required string foo
+    2: optional InnerStruct inner
+}
+
+struct InnerStruct {
+    # 1: required string something
+    1: optional OuterStruct outer
+}
