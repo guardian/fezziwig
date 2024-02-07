@@ -62,19 +62,32 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
   def decodeThriftStruct[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
     val A = weakTypeOf[A]
+    decodeThriftStructGeneric(A, x)
+  }
 
+  def decodeThriftStructGeneric(A: Type, x: c.Tree, serialisers: List[String] = List.empty, optionWrapped: Boolean = false): c.Tree = {
     val apply = getApplyMethod(A)
-
+    if (serialisers.filter(x => x == A.toString).length > 1) {
+      c.abort(c.enclosingPosition, s"Circular dependency on ${A.toString}")
+    }
     val params = apply.paramLists.head.zipWithIndex.map { case (param, i) =>
       val name = param.name
       val tpe = param.typeSignature
       val fresh = c.freshName(name)
 
-
       val decoder: c.Tree = {
         // If this is a recursive optional field then decode using `this`
         if (tpe.typeSymbol.fullName == "scala.Option" && tpe.typeArgs.headOption.contains(A)) {
           q"io.circe.Decoder.decodeOption[${tpe.typeArgs.head}](this)"
+        } else if (
+          tpe.typeSymbol.fullName == "scala.Option" &&
+            tpe.typeArgs.nonEmpty && tpe.typeArgs.head <:< weakTypeOf[ThriftStruct] && !(tpe.typeArgs.head <:< weakTypeOf[ThriftUnion])
+        ) {
+//          println(s"generic decode - ${tpe.toString} ${tpe.typeArgs.head}")
+          decodeThriftStructGeneric(tpe.typeArgs.head, x, tpe.typeArgs.head.toString :: serialisers, true)
+        } else if (tpe <:< weakTypeOf[ThriftStruct] && !(tpe <:< weakTypeOf[ThriftUnion])) {
+  //        println(s"generic decode - ${tpe.toString}")
+          decodeThriftStructGeneric(tpe, x, tpe.toString :: serialisers)
         } else {
           getImplicitDecoder(tpe)
         }
@@ -145,20 +158,34 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       }
     }
 
-    q"""{
+    val decoder = q"""{
       new _root_.io.circe.Decoder[$A] {
         import cats.syntax.apply._
         import cats.syntax.either._
         def apply(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[$A] = {
           for (..${
-            fq"""_ <- Either.fromOption(cursor.value.asObject, _root_.io.circe.DecodingFailure("Expected an object", cursor.history))""" +:
-              params.map(_._2)
-          }) yield $apply(..${params.map(_._1)})
+      fq"""_ <- Either.fromOption(cursor.value.asObject, _root_.io.circe.DecodingFailure("Expected an object", cursor.history))""" +:
+        params.map(_._2)
+    }) yield $apply(..${params.map(_._1)})
         }
 
         ${accumulating.getOrElse(q"")}
       }
     }"""
+
+    if (optionWrapped) {
+      q"""{
+        val decoder = $decoder
+        new _root_.io.circe.Decoder[Option[$A]] {
+          def apply(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[Option[$A]] = {
+            if (cursor.value.isNull) Right(None)
+            else decoder(cursor).map(Some.apply)
+          }
+        }
+      }"""
+    } else {
+      decoder
+    }
   }
 
   /**
