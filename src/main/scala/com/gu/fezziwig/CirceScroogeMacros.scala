@@ -3,7 +3,8 @@ package com.gu.fezziwig
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
 import com.twitter.scrooge.{ThriftEnum, ThriftStruct, ThriftUnion}
-import io.circe.{Decoder, Encoder}
+import io.circe.Decoder.Result
+import io.circe.{Decoder, Encoder, HCursor}
 import shapeless.{Lazy, |¬|}
 
 /**
@@ -22,9 +23,15 @@ object CirceScroogeMacros {
   implicit def decodeThriftEnum[A <: ThriftEnum]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftEnum[A]
   implicit def decodeThriftUnion[A <: ThriftUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftUnion[A]
 
-  implicit def encodeThriftStruct[A <: ThriftStruct : NotUnion]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftStruct[A]
-  implicit def encodeThriftEnum[A <: ThriftEnum]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftEnum[A]
-  implicit def encodeThriftUnion[A <: ThriftUnion]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftUnion[A]
+//  implicit def encodeThriftStruct[A <: ThriftStruct : NotUnion]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftStruct[A]
+//  implicit def encodeThriftEnum[A <: ThriftEnum]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftEnum[A]
+//  implicit def encodeThriftUnion[A <: ThriftUnion]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftUnion[A]
+}
+
+object CustomDecoders {
+  def decodeThriftStructOption[A] = new Decoder[Option[A]] {
+    override def apply(c: HCursor): Result[Option[A]] = Right(None)
+  }
 }
 
 private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
@@ -65,18 +72,17 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     decodeThriftStructGeneric(A, x)
   }
 
-  def decodeThriftStructGeneric(A: Type, x: c.Tree, serialisers: List[String] = List.empty, optionWrapped: Boolean = false): c.Tree = {
+  def decodeThriftStructGeneric(A: Type, x: c.Tree, serialisers: List[(String, c.universe.TermName)] = List.empty, optionWrapped: Boolean = false): c.Tree = {
+    val me: c.universe.TermName = TermName(c.freshName)
     val apply = getApplyMethod(A)
-    if (serialisers.filter(x => x == A.toString).length > 1) {
-      c.abort(c.enclosingPosition, s"Circular dependency on ${A.toString}")
-    }
+
+    var decoderFound = false
     val params = apply.paramLists.head.zipWithIndex.map { case (param, i) =>
       val name = param.name
       val tpe = param.typeSignature
       val fresh = c.freshName(name)
 
-      val decoder: c.Tree = {
-        // If this is a recursive optional field then decode using `this`
+      val decoder: c.Tree = {        // If this is a recursive optional field then decode using `this`
         if (tpe.typeSymbol.fullName == "scala.Option" && tpe.typeArgs.headOption.contains(A)) {
           q"io.circe.Decoder.decodeOption[${tpe.typeArgs.head}](this)"
         } else if (
@@ -84,16 +90,25 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
             tpe.typeArgs.nonEmpty && tpe.typeArgs.head <:< weakTypeOf[ThriftStruct] && !(tpe.typeArgs.head <:< weakTypeOf[ThriftUnion])
         ) {
 //          println(s"generic decode - ${tpe.toString} ${tpe.typeArgs.head}")
-          decodeThriftStructGeneric(tpe.typeArgs.head, x, tpe.typeArgs.head.toString :: serialisers, true)
+//          if (serialisers.find(x => x._1 == tpe.typeArgs.head.toString).isDefined) {
+//            val t = q"""() => ${serialisers.find(x => x._1 == tpe.typeArgs.head.toString).head._2}"""
+//            decoderFound = true
+//            println(s"Serialising $A, param ${tpe.typeArgs.head}")
+//            println(t)
+//            t
+//          } else {
+//            decodeThriftStructGeneric(tpe.typeArgs.head, x, (A.toString -> me) :: serialisers, true)
+//          }
+          q"com.gu.fezziwig.CustomDecoders.decodeThriftStructOption[${tpe.typeArgs.head}]"
         } else if (tpe <:< weakTypeOf[ThriftStruct] && !(tpe <:< weakTypeOf[ThriftUnion])) {
   //        println(s"generic decode - ${tpe.toString}")
-          decodeThriftStructGeneric(tpe, x, tpe.toString :: serialisers)
+          decodeThriftStructGeneric(tpe, x, (A.toString -> me) :: serialisers)
         } else {
           getImplicitDecoder(tpe)
         }
       }
 
-      val decodeExpr = {
+    val decodeExpr = {
         val decodeParam =
           q"""cursor.downField(${name.toString}).success
             .map(x => x.as[$tpe]($decoder))"""
@@ -173,19 +188,36 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       }
     }"""
 
-    if (optionWrapped) {
-      q"""{
-        val decoder = $decoder
-        new _root_.io.circe.Decoder[Option[$A]] {
+    val optionDecoder =
+      q"""
+        { new _root_.io.circe.Decoder[Option[$A]] {
           def apply(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[Option[$A]] = {
             if (cursor.value.isNull) Right(None)
             else decoder(cursor).map(Some.apply)
           }
         }
+        }
+       """
+    println("----------")
+    println(decoder)
+    println("----------")
+    val test = if (optionWrapped) {
+      q"""{
+        val decoder = $decoder
+        implicit def $me: _root_.io.circe.Decoder[Option[$A]]  = $optionDecoder
+        $optionDecoder
       }"""
     } else {
-      decoder
+      q"""{
+          val decoder = $decoder
+        implicit def $me: _root_.io.circe.Decoder[Option[$A]]  = $optionDecoder
+        $decoder
+        }"""
     }
+    if (decoderFound) {
+      //println(test)
+    }
+    test
   }
 
   /**
