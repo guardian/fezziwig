@@ -7,12 +7,50 @@ import diffson.jsonpatch._
 import diffson.jsonpatch.simplediff._
 import io.circe.CursorOp.DownField
 import io.circe._
+import io.circe.generic.semiauto._
 import io.circe.parser._
 import io.circe.syntax._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import shapeless._
+import io.circe.generic.encoding.DerivedAsObjectEncoder
 
 class FezziwigTests extends AnyFlatSpec with Matchers  {
+
+  implicit def outerGeneric[R](implicit
+    gen: LabelledGeneric.Aux[InnerStruct, R],
+  ): LabelledGeneric[OuterStruct] = new LabelledGeneric[OuterStruct] {
+    type Repr = String :: Option[R] :: HNil
+
+    def to(os: OuterStruct): Repr = os.foo :: os.inner.map(gen.to(_)) :: HNil
+    def from(hlist: Repr): OuterStruct = hlist match {
+      case foo :: inner :: HNil => OuterStruct(foo, inner.map(gen.from(_)))
+    }
+  }
+  implicit def innerGeneric[R](implicit
+    gen: LabelledGeneric.Aux[OuterStruct, R],
+  ): LabelledGeneric[InnerStruct] = new LabelledGeneric[InnerStruct] {
+    type Repr = Option[R] :: HNil
+
+    def to(is: InnerStruct): Repr = is.outer.map(gen.to(_)) :: HNil
+    def from(hlist: Repr): InnerStruct = hlist match {
+      case outer :: HNil => InnerStruct(outer.map(gen.from(_)))
+    }
+
+  }
+
+  implicit val outerAsObjectEncoder: DerivedAsObjectEncoder[OuterStruct] = implicitly[DerivedAsObjectEncoder[OuterStruct]]
+  implicit val outerEncoder: Encoder[OuterStruct] = deriveEncoder
+  implicit val innerAsObjectEncoder: DerivedAsObjectEncoder[InnerStruct] = implicitly[DerivedAsObjectEncoder[InnerStruct]]
+  implicit val innerEncoder: Encoder[InnerStruct] = deriveEncoder
+
+  it should "round-trip scrooge thrift models (outer)" in {
+    val decoded: OuterStruct = OuterStruct("hello", Some(InnerStruct(Some(OuterStruct("oh", None)))))
+
+    val jsonAfter: Json = decoded.asJson
+
+    jsonAfter shouldBe("")
+  }
 
   it should "round-trip scrooge thrift models" in {
     val jsonString =
