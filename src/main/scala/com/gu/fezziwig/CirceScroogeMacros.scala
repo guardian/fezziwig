@@ -69,10 +69,12 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
   def decodeThriftStruct[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
     val A = weakTypeOf[A]
+    println(s"External creating decoder for $A")
     decodeThriftStructGeneric(A, x)
   }
 
   def decodeThriftStructGeneric(A: Type, x: c.Tree, serialisers: List[(String, c.universe.TermName)] = List.empty, optionWrapped: Boolean = false): c.Tree = {
+    println(s"Creating decoder for $A")
     val me: c.universe.TermName = TermName(c.freshName)
     val apply = getApplyMethod(A)
 
@@ -89,17 +91,20 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
           tpe.typeSymbol.fullName == "scala.Option" &&
             tpe.typeArgs.nonEmpty && tpe.typeArgs.head <:< weakTypeOf[ThriftStruct] && !(tpe.typeArgs.head <:< weakTypeOf[ThriftUnion])
         ) {
-//          println(s"generic decode - ${tpe.toString} ${tpe.typeArgs.head}")
-//          if (serialisers.find(x => x._1 == tpe.typeArgs.head.toString).isDefined) {
-//            val t = q"""() => ${serialisers.find(x => x._1 == tpe.typeArgs.head.toString).head._2}"""
-//            decoderFound = true
-//            println(s"Serialising $A, param ${tpe.typeArgs.head}")
-//            println(t)
-//            t
-//          } else {
-//            decodeThriftStructGeneric(tpe.typeArgs.head, x, (A.toString -> me) :: serialisers, true)
-//          }
-          q"com.gu.fezziwig.CustomDecoders.decodeThriftStructOption[${tpe.typeArgs.head}]"
+          //println(s"generic decode - ${tpe.toString} ${tpe.typeArgs.head}")
+          if (serialisers.find(x => x._1 == tpe.typeArgs.head.toString).isDefined) {
+            val t = q"""() => ${serialisers.find(x => x._1 == tpe.typeArgs.head.toString).head._2}"""
+            decoderFound = true
+            //println(s"Serialising $A, param ${tpe.typeArgs.head}")
+            //println(t)
+
+            t
+            //q"com.gu.fezziwig.CustomDecoders.decodeThriftStructOption[${tpe.typeArgs.head}]"
+          } else {
+            decodeThriftStructGeneric(tpe.typeArgs.head, x, (A.toString -> me) :: serialisers, true)
+
+            //q"com.gu.fezziwig.CustomDecoders.decodeThriftStructOption[${tpe.typeArgs.head}]"
+          }
         } else if (tpe <:< weakTypeOf[ThriftStruct] && !(tpe <:< weakTypeOf[ThriftUnion])) {
   //        println(s"generic decode - ${tpe.toString}")
           decodeThriftStructGeneric(tpe, x, (A.toString -> me) :: serialisers)
@@ -198,25 +203,25 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         }
         }
        """
-    println("----------")
-    println(decoder)
-    println("----------")
+
     val test = if (optionWrapped) {
       q"""{
         val decoder = $decoder
-        implicit def $me: _root_.io.circe.Decoder[Option[$A]]  = $optionDecoder
-        $optionDecoder
+        implicit def $me: _root_.io.circe.Decoder[Option[$A]] = $optionDecoder
+        $me
       }"""
     } else {
       q"""{
           val decoder = $decoder
         implicit def $me: _root_.io.circe.Decoder[Option[$A]]  = $optionDecoder
-        $decoder
+
+        decoder
         }"""
     }
-    if (decoderFound) {
-      //println(test)
-    }
+//    println("----------")
+//    println(test)
+//    println("----------")
+    println(s"Done creating decoder for $A")
     test
   }
 
