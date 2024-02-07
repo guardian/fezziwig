@@ -1,6 +1,7 @@
 package com.gu.fezziwig
 
 import com.gu.fezziwig.CirceScroogeMacros._
+import com.gu.fezziwig.CirceScroogeWhiteboxMacros._
 import com.twitter.io.Buf
 import com.twitter.scrooge._
 import diffson._
@@ -9,13 +10,88 @@ import diffson.jsonpatch._
 import diffson.jsonpatch.simplediff._
 import io.circe.CursorOp.DownField
 import io.circe._
+import io.circe.generic.semiauto._
 import io.circe.parser._
 import io.circe.syntax._
 import org.apache.thrift.protocol._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import shapeless._
 
 class FezziwigTests extends AnyFlatSpec with Matchers  {
+  implicit val outerStructDecoder: Decoder[OuterStruct] = deriveDecoder
+  implicit val outerStructEncoder: Encoder[OuterStruct] = deriveEncoder
+  implicit val innerStructDecoder: Decoder[InnerStruct] = deriveDecoder
+  implicit val innerStructEncoder: Encoder[InnerStruct] = deriveEncoder
+
+  implicit val union1Decoder: Decoder[Union1] = deriveDecoder
+  implicit val union1Encoder: Encoder[Union1] = deriveEncoder
+
+  implicit val structBDecoder: Decoder[StructB] = deriveDecoder
+  implicit val structBEncoder: Encoder[StructB] = deriveEncoder
+
+  implicit val structCDecoder: Decoder[StructC] = deriveDecoder
+  implicit val structCEncoder: Encoder[StructC] = deriveEncoder
+
+  implicit val structDDecoder: Decoder[StructD] = deriveDecoder
+  implicit val structDEncoder: Encoder[StructD] = deriveEncoder
+
+  implicit val structADecoder: Decoder[StructA] = deriveDecoder
+  implicit val structAEncoder: Encoder[StructA] = deriveEncoder
+
+  implicit val decodeDefaultTestStruct: Decoder[DefaultTestStruct] = deriveDecoder
+
+  it should "round-trip scrooge thrift models [outer]" in {
+    val jsonString =
+      """
+        |{
+        |  "foo" : "hello",
+        |  "inner" : {
+        |    "outer" : {
+        |      "foo" : "oh",
+        |      "inner" : null
+        |    }
+        |  }
+        |}
+      """.stripMargin
+
+    val jsonBefore: Json = parse(jsonString).toOption.get
+
+    val decoded: StructB = jsonBefore.as[StructB].toOption.get
+    // val decoded: StructB = StructB(Union1.C(StructC("hello")))
+    println(s"Decoded is $decoded")
+
+    val jsonAfter: Json = decoded.asJson
+
+    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
+    if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
+    diffJ should be(JsonPatch(Nil))
+  }
+
+  it should "round-trip StructB (struct containing a union)" in {
+    val jsonString =
+      """
+        |{
+        |  "u" : {
+        |    "c" : {
+        |      "s" : "hello"
+        |    }
+        |  }
+        |}
+      """.stripMargin
+
+    val jsonBefore: Json = parse(jsonString).toOption.get
+
+    val decoded: StructB = jsonBefore.as[StructB].toOption.get
+    // val decoded: StructB = StructB(Union1.C(StructC("hello")))
+    println(s"Decoded is $decoded")
+
+    val jsonAfter: Json = decoded.asJson
+
+    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
+    if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
+    diffJ should be(JsonPatch(Nil))
+  }
 
   it should "round-trip scrooge thrift models" in {
     val jsonString =
@@ -56,7 +132,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
     val expectedFailures = List(
       DecodingFailure("String", List(DownField("s"), DownField("c"), DownField("u"), DownField("b"))),
       DecodingFailure("String", List(DownField("foo"))),
-      DecodingFailure("Expected an object", List(DownField("x")))
+      DecodingFailure("Attempt to decode value on failed cursor", List(DownField("s"), DownField("x")))
     )
 
     val jsonString =
@@ -127,9 +203,9 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
     val jsonBefore: Json = parse(jsonString).toOption.get
 
-    val decoded: Option[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct].toOption
+    val decoded = jsonBefore.as[DefaultTestStruct]
 
-    decoded shouldBe Some(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6, List(1,2)))
+    decoded shouldBe Right(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6, List(1, 2)))
   }
 
   it should "fail to decode a missing default-requiredness field without default" in {
@@ -149,7 +225,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
     val decoded: Decoder.Result[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct]
 
-    decoded shouldBe Left(DecodingFailure("Missing field: third", List()))
+    decoded shouldBe Left(DecodingFailure("Attempt to decode value on failed cursor", List(DownField("third"))))
   }
 
   it should "decode a missing default-requiredness field with default" in {
@@ -167,9 +243,9 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
     val jsonBefore: Json = parse(jsonString).toOption.get
 
-    val decoded: Option[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct].toOption
+    val decoded = jsonBefore.as[DefaultTestStruct]
 
-    decoded shouldBe Some(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6, List(1, 2)))
+    decoded shouldBe Right(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6, List(1, 2)))
   }
 
   it should "fail to decode a missing required field without default" in {
@@ -189,7 +265,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
     val decoded: Decoder.Result[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct]
 
-    decoded shouldBe Left(DecodingFailure("Missing field: fifth", List()))
+    decoded shouldBe Left(DecodingFailure("Attempt to decode value on failed cursor", List(DownField("fifth"))))
   }
 
   it should "decode a missing required field with default" in {
@@ -207,9 +283,9 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
     val jsonBefore: Json = parse(jsonString).toOption.get
 
-    val decoded: Option[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct].toOption
+    val decoded = jsonBefore.as[DefaultTestStruct]
 
-    decoded shouldBe Some(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6, List(1,2)))
+    decoded shouldBe Right(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6, List(1,2)))
   }
 
   it should "decode a missing required list field without default" in {
