@@ -271,6 +271,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
   def encodeThriftStruct[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
     val A = weakTypeOf[A]
     val apply = getApplyMethod(A)
+    println(s"getting encoder for ${A.typeSymbol.fullName}")
 
     val pairs = apply.paramLists.head.map { param =>
       val name = param.name
@@ -295,13 +296,15 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       else q"""_root_.scala.Some(${name.toString} -> $encoder.apply(thrift.${name.toTermName}))"""
     }
 
-    q"""{
+    val r = q"""{
        new _root_.io.circe.Encoder[$A] {
           def apply(thrift: $A): _root_.io.circe.Json = {
             _root_.io.circe.Json.fromFields($pairs.flatten)
           }
         }
      }"""
+    println(r)
+    r
   }
 
   /**
