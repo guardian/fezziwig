@@ -37,6 +37,7 @@ object CustomDecoders {
 private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
   import c.universe._
 
+  println("initialising class")
   /**
     * Macro to provide custom decoding of Thrift structs using the companion object's `apply` method.
     *
@@ -70,11 +71,14 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
   def decodeThriftStruct[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
     val A = weakTypeOf[A]
     println(s"External creating decoder for $A")
-    decodeThriftStructGeneric(A, x)
+    val z = decodeThriftStructGeneric(A, x)
+    println(z)
+    z
   }
 
+  // refactor so that all implicit whatsits are creatde as named things that are used later to make code more penetrable
   def decodeThriftStructGeneric(A: Type, x: c.Tree, serialisers: List[(String, c.universe.TermName)] = List.empty, optionWrapped: Boolean = false): c.Tree = {
-    println(s"Creating decoder for $A")
+    //println(s"Creating decoder for $A")
     val me: c.universe.TermName = TermName(c.freshName)
     val apply = getApplyMethod(A)
 
@@ -93,7 +97,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         ) {
           //println(s"generic decode - ${tpe.toString} ${tpe.typeArgs.head}")
           if (serialisers.find(x => x._1 == tpe.typeArgs.head.toString).isDefined) {
-            val t = q"""() => ${serialisers.find(x => x._1 == tpe.typeArgs.head.toString).head._2}"""
+            val t = q"""${serialisers.find(x => x._1 == tpe.typeArgs.head.toString).head._2}"""
             decoderFound = true
             //println(s"Serialising $A, param ${tpe.typeArgs.head}")
             //println(t)
@@ -207,13 +211,13 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     val test = if (optionWrapped) {
       q"""{
         val decoder = $decoder
-        implicit def $me: _root_.io.circe.Decoder[Option[$A]] = $optionDecoder
+        val $me: _root_.io.circe.Decoder[Option[$A]] = $optionDecoder
         $me
       }"""
     } else {
       q"""{
           val decoder = $decoder
-        implicit def $me: _root_.io.circe.Decoder[Option[$A]]  = $optionDecoder
+        val $me: _root_.io.circe.Decoder[Option[$A]]  = $optionDecoder
 
         decoder
         }"""
