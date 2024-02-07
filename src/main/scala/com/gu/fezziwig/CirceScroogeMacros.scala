@@ -137,7 +137,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       }
     }
 
-    q"""{
+    val r = q"""{
       new _root_.io.circe.Decoder[$A] {
         import cats.syntax.apply._
         import cats.syntax.either._
@@ -151,7 +151,8 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         ${accumulating.getOrElse(q"")}
       }
     }"""
-
+    println(s"Made a Decoder: $r")
+    r
   }
 
   /**
@@ -281,7 +282,9 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       else q"""_root_.scala.Some(${name.toString} -> $implicitEncoder.apply(thrift.${name.toTermName}))"""
     }
 
-    q"""{ _root_.io.circe.Encoder.instance((thrift: $A) => _root_.io.circe.Json.fromFields($pairs.flatten)) }"""
+    val r = q"""{ _root_.io.circe.Encoder.instance((thrift: $A) => _root_.io.circe.Json.fromFields($pairs.flatten)) }"""
+    println(s"Made an encoder: $r")
+    r
   }
 
   /**
