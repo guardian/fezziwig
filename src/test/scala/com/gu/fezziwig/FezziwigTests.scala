@@ -17,6 +17,14 @@ import io.circe.generic.encoding.DerivedAsObjectEncoder
 
 class FezziwigTests extends AnyFlatSpec with Matchers  {
 
+  implicit val decoder: Decoder[OuterStruct] = ???
+  implicit val decoder: Decoder[InnerStruct] = ???
+
+
+  implicit val encoder: Encoder[OuterStruct] = Encoder.instance(((thrift: OuterStruct) => Json.fromFields(List(Some("foo" -> (Encoder.encodeString.apply(thrift.foo))), thrift.inner.map(((x$5) => "inner" -> (encodeThriftStruct[InnerStruct](shapeless.`package`.nsub[InnerStruct, com.twitter.scrooge.ThriftUnion]).apply(x$5))))).flatten)))
+
+  implicit val encoderInner: Encoder[InnerStruct] = Encoder.instance(((thrift: InnerStruct) => Json.fromFields(List(thrift.outer.map(((x) => "outer" -> (encodeThriftStruct[OuterStruct](shapeless.`package`.nsub[OuterStruct, com.twitter.scrooge.ThriftUnion]).apply(x))))).flatten)))
+
   implicit def outerGeneric[R](implicit
     gen: LabelledGeneric.Aux[InnerStruct, R],
   ): LabelledGeneric[OuterStruct] = new LabelledGeneric[OuterStruct] {
