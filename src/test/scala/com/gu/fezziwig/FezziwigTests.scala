@@ -22,8 +22,8 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
     val gen = LabelledGeneric[Option[InnerStruct]]
 
     new LabelledGeneric[OuterStruct] {
-      val fooWitness = Witness("foo")
-      val innerWitness = Witness("inner")
+      val fooWitness = Witness(Symbol("foo"))
+      val innerWitness = Witness(Symbol("inner"))
 
       type Repr =
         labelled.FieldType[fooWitness.T, String] :: labelled.FieldType[innerWitness.T, gen.Repr] :: HNil
@@ -43,7 +43,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
     val gen = LabelledGeneric[Option[OuterStruct]]
 
     new LabelledGeneric[InnerStruct] {
-      val outerWitness = Witness("outer")
+      val outerWitness = Witness(Symbol("outer"))
       type Repr = labelled.FieldType[outerWitness.T, gen.Repr] :: HNil
 
       def to(is: InnerStruct): Repr = {
@@ -58,9 +58,22 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
   val tupleGeneric = LabelledGeneric[Tuple2[String, Int]]
   val exampleGeneric = tupleGeneric.to(("hello", 1))
+  case class Example(foo: String, bar: Boolean)
+  val caseClassGeneric = LabelledGeneric[Example]
+  val fooWitness = Witness(Symbol("foo"))
+  val barWitness = Witness(Symbol("bar"))
+  type ExampleRepr = labelled.FieldType[fooWitness.T, String] :: labelled.FieldType[barWitness.T, Boolean] :: HNil
+  val exampleRecord: ExampleRepr = caseClassGeneric.to(Example("hello", true))
+  // val testEncodeRecord: ReprAsObjectEncoder[labelled.FieldType[fooWitness.T, String] :: labelled.FieldType[barWitness.T, Boolean] :: HNil] = ReprAsObjectEncoder.deriveReprAsObjectEncoder
+  val testEncodeRecord: ReprAsObjectEncoder[ExampleRepr] = implicitly
+  val genAuxExample: LabelledGeneric.Aux[Example, ExampleRepr] = implicitly
+  val exampleDerived: DerivedAsObjectEncoder[Example] = DerivedAsObjectEncoder.deriveEncoder(genAuxExample, testEncodeRecord)
+
+  // val recordGeneric = LabelledGeneric[]
+  // val exampleRecordGeneric = recordGeneric.to()
   val outerAux: LabelledGeneric.Aux[OuterStruct, outerGeneric.Repr] = outerGeneric
   val testEncodeWorks: ReprAsObjectEncoder[HNil] = ReprAsObjectEncoder.deriveReprAsObjectEncoder
-  val hello = Witness("hello")
+  val hello = Witness(Symbol("hello"))
   val testEncodeFails: ReprAsObjectEncoder[labelled.FieldType[hello.T, String] :: HNil] = ReprAsObjectEncoder.deriveReprAsObjectEncoder
   val outerEncode: ReprAsObjectEncoder[outerGeneric.Repr] = ReprAsObjectEncoder.deriveReprAsObjectEncoder
   val outerDerived: DerivedAsObjectEncoder[OuterStruct] = DerivedAsObjectEncoder.deriveEncoder(outerAux, outerEncode)
