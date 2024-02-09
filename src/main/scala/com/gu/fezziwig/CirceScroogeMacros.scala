@@ -19,9 +19,9 @@ object CirceScroogeMacros {
     * Note - intellij doesn't like the references to methods in an uninstantiated class, but it does compile.
     */
 
-  implicit def decodeThriftStruct[A <: ThriftStruct : NotUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftStruct[A]
+  implicit def decodeThriftStruct[A <: ThriftStruct]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftStruct[A]
   implicit def decodeThriftEnum[A <: ThriftEnum]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftEnum[A]
-  implicit def decodeThriftUnion[A <: ThriftUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftUnion[A]
+  //implicit def decodeThriftUnion[A <: ThriftUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftUnion[A]
 
 //  implicit def encodeThriftStruct[A <: ThriftStruct : NotUnion]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftStruct[A]
 //  implicit def encodeThriftEnum[A <: ThriftEnum]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftEnum[A]
@@ -83,10 +83,13 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         }
        """
 
-  def decodeThriftStruct[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
+  def decodeThriftStruct[A: c.WeakTypeTag]: c.Tree = {
     val A = weakTypeOf[A]
     val decoderName = nameFromType(A)
-    createThriftStructDecoder(A, decoderName, nameFromTypeOption(A))
+    if (A <:< weakTypeOf[ThriftUnion])
+      createThriftUnionDecoder(A, decoderName, nameFromTypeOption(A))
+    else
+      createThriftStructDecoder(A, decoderName, nameFromTypeOption(A))
     val dependencies = decoderCache.flatMap({ case (tpe, cacheEntry) =>
       List(
         q"""def ${cacheEntry.name}: Decoder[${tpe}] = ${cacheEntry.implementation}""",
@@ -98,6 +101,49 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
        $decoderName
     """
   }
+
+  /**
+   * Macro to produce Decoders for ThriftUnion types.
+   *
+   * A ThriftUnion, U, has a companion object which defines a case class extending U for each member of the union.
+   * Each case class takes a single parameter, whose type is an alias for the actual type contained by that member.
+   *
+   * E.g. for the following thrift definition:
+   * {{{
+   *   union U {
+   *     1: FooStruct foo
+   *     2: BarStruct bar
+   *   }
+   *
+   *   struct T {
+   *     1: U union
+   *   }
+   * }}}
+   *
+   * We may expect the following JSON:
+   * {{{
+   *   {
+   *     union: {
+   *       foo: {
+   *         ...
+   *       }
+   *     }
+   *   }
+   * }}}
+   *
+   * In the scrooge-generated code, for the member foo of union U, there exists a case class:
+   *   {{{
+   *   case class Foo(foo: FooAlias) extends U
+   *   }}}
+   * where FooAlias aliases FooStruct.
+   * We need to match on the single JSON field and determine which member of the union is present.
+   * So the decoder will contain a case statement for the member foo as follows:
+   *   {{{
+   *   case "foo" => c.downField("foo").flatMap(_.as[FooStruct](decoderForFooStruct).toOption).map(Foo)
+   *   }}}
+   *
+   */
+
 
   private def nameFromType(tpe: Type) = {
     TermName(c.freshName(tpe.toString))
@@ -217,63 +263,6 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         $valueOf(withoutSeparators).getOrElse($unknown.apply(-1))
       })
     """
-  }
-
-  /**
-    * Macro to produce Decoders for ThriftUnion types.
-    *
-    * A ThriftUnion, U, has a companion object which defines a case class extending U for each member of the union.
-    * Each case class takes a single parameter, whose type is an alias for the actual type contained by that member.
-    *
-    * E.g. for the following thrift definition:
-    * {{{
-    *   union U {
-    *     1: FooStruct foo
-    *     2: BarStruct bar
-    *   }
-    *
-    *   struct T {
-    *     1: U union
-    *   }
-    * }}}
-    *
-    * We may expect the following JSON:
-    * {{{
-    *   {
-    *     union: {
-    *       foo: {
-    *         ...
-    *       }
-    *     }
-    *   }
-    * }}}
-    *
-    * In the scrooge-generated code, for the member foo of union U, there exists a case class:
-    *   {{{
-    *   case class Foo(foo: FooAlias) extends U
-    *   }}}
-    * where FooAlias aliases FooStruct.
-    * We need to match on the single JSON field and determine which member of the union is present.
-    * So the decoder will contain a case statement for the member foo as follows:
-    *   {{{
-    *   case "foo" => c.downField("foo").flatMap(_.as[FooStruct](decoderForFooStruct).toOption).map(Foo)
-    *   }}}
-    *
-    */
-  def decodeThriftUnion[A: c.WeakTypeTag]: c.Tree = {
-    val A = weakTypeOf[A]
-    val decoderName = nameFromType(A)
-    createThriftUnionDecoder(A, decoderName, nameFromTypeOption(A))
-    val dependencies = decoderCache.flatMap({ case (tpe, cacheEntry) =>
-      List(
-        q"""def ${cacheEntry.name}: Decoder[${tpe}] = ${cacheEntry.implementation}""",
-        q"""def ${cacheEntry.optionName}: Decoder[Option[${tpe}]] = ${optionWrapped(tpe, cacheEntry.name)}"""
-      )
-    })
-    q"""
-       ..${dependencies}
-       $decoderName
-     """
   }
 
   def createThriftUnionDecoder(A: Type, decodeMe: c.universe.TermName, decodeOptionMe: c.universe.TermName): DecoderDefinition = {
