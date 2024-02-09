@@ -28,12 +28,6 @@ object CirceScroogeMacros {
 //  implicit def encodeThriftUnion[A <: ThriftUnion]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftUnion[A]
 }
 
-object CustomDecoders {
-  def decodeThriftStructOption[A] = new Decoder[Option[A]] {
-    override def apply(c: HCursor): Result[Option[A]] = Right(None)
-  }
-}
-
 private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
   import c.universe._
 
