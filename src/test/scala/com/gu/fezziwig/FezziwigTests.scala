@@ -61,7 +61,6 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
     val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
     if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
     diffJ should be(JsonPatch(Nil))
-    true should be(true)
   }
 
   it should "accumulate errors" in {
