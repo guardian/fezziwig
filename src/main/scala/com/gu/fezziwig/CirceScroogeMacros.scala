@@ -70,12 +70,10 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       val tpe = param.typeSignature
       val fresh = c.freshName(name)
 
-      val implicitDecoder: c.Tree = getImplicitDecoder(tpe)
-
       val decodeExpr = {
         val decodeParam =
           q"""cursor.downField(${name.toString}).success
-            .map(x => x.as[$tpe]($implicitDecoder))"""
+            .map(x => x.as[$tpe](_root_.scala.Predef.implicitly[_root_.io.circe.Decoder[_root_.shapeless.Lazy[$tpe]]]))"""
 
         if (param.asTerm.isParamWithDefault) {
           /**
@@ -95,11 +93,9 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
           * If we try to use the same tree twice, the compiler may blow up with the following helpful error message:
           *   `scala.reflect.internal.Types$TypeError: value <none> is not a member of com.gu.fezziwig.FezziwigTests`
           */
-        val decoderCopy = c.untypecheck(implicitDecoder)
-
         val accDecodeParam =
           q"""cursor.downField(${name.toString}).success
-            .map(x => $decoderCopy.decodeAccumulating(x))"""
+            .map(x => _root_.scala.Predef.implicitly.decodeAccumulating(x))"""
 
         if (param.asTerm.isParamWithDefault) {
           val defaultValue = A.companion.member(TermName("apply$default$" + (i + 1)))
@@ -137,7 +133,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       }
     }
 
-    q"""{
+    val r = q"""{
       new _root_.io.circe.Decoder[$A] {
         import cats.syntax.apply._
         import cats.syntax.either._
@@ -151,7 +147,8 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         ${accumulating.getOrElse(q"")}
       }
     }"""
-
+    println(s"Made a decoder: $r")
+    r
   }
 
   /**
@@ -275,13 +272,16 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         case other => (other, false)
       }
 
-      val implicitEncoder: c.Tree = getImplicitEncoder(tpe)
-
-      if (isOption) q"""thrift.${name.toTermName}.map(${name.toString} -> $implicitEncoder.apply(_))"""
-      else q"""_root_.scala.Some(${name.toString} -> $implicitEncoder.apply(thrift.${name.toTermName}))"""
+      if (isOption) {
+        q"""val implicitEncoder = _root_.scala.Predef.implicitly[_root_.io.circe.Decoder[_root_.shapeless.Lazy[$tpe]]]; thrift.${name.toTermName}.map(${name.toString} -> implicitEncoder.apply(_))"""
+      } else {
+        q"""val implicitEncoder = _root_.scala.Predef.implicitly[_root_.io.circe.Decoder[_root_.shapeless.Lazy[$tpe]]]; _root_.scala.Some(${name.toString} -> implicitEncoder.apply(thrift.${name.toTermName}))"""
+      }
     }
 
-    q"""{ _root_.io.circe.Encoder.instance((thrift: $A) => _root_.io.circe.Json.fromFields($pairs.flatten)) }"""
+    val r = q"""{ _root_.io.circe.Encoder.instance((thrift: $A) => _root_.io.circe.Json.fromFields($pairs.flatten)) }"""
+    println(s"Made an encoder: $r")
+    r
   }
 
   /**
