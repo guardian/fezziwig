@@ -37,8 +37,10 @@ object CustomDecoders {
 private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
   import c.universe._
 
-  case class DecoderCache(tpe: Type, name: c.universe.TermName, tree: c.universe.Tree, optionName: c.universe.TermName)
-  val decoderCache = scala.collection.mutable.ListBuffer[DecoderCache]()
+  case class DecoderDefinition(name: c.universe.TermName, optionName: c.universe.TermName, implementation: c.universe.Tree)
+
+  val decoderCache = scala.collection.mutable.Map[Type, DecoderDefinition]()
+
   /**
     * Macro to provide custom decoding of Thrift structs using the companion object's `apply` method.
     *
@@ -69,7 +71,8 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     * }}}
     */
 
-    def optionWrapped(A: Type, decoder: TermName) =
+    // TODO: probably this isn't a complete Option[T] implementation
+    private def optionWrapped(A: Type, decoder: TermName) =
     q"""
         { new _root_.io.circe.Decoder[Option[$A]] {
           def apply(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[Option[$A]] = {
@@ -79,14 +82,15 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         }
         }
        """
+
   def decodeThriftStruct[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
     val A = weakTypeOf[A]
     val decoderName = nameFromType(A)
     createThriftStructs(A, x, decoderName, nameFromTypeOption(A))
-    val dependencies = decoderCache.flatMap({ cacheEntry =>
+    val dependencies = decoderCache.flatMap({ case (tpe, cacheEntry) =>
       List(
-        q"""def ${cacheEntry.name}: Decoder[${cacheEntry.tpe}] = ${cacheEntry.tree}""",
-        q"""def ${cacheEntry.optionName}: Decoder[Option[${cacheEntry.tpe}]] = ${optionWrapped(cacheEntry.tpe, cacheEntry.name)}"""
+        q"""def ${cacheEntry.name}: Decoder[${tpe}] = ${cacheEntry.implementation}""",
+        q"""def ${cacheEntry.optionName}: Decoder[Option[${tpe}]] = ${optionWrapped(tpe, cacheEntry.name)}"""
       )
     })
     q"""
@@ -101,8 +105,12 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
   private def nameFromTypeOption(tpe: Type) =
     TermName(c.freshName("option" + tpe.toString))
 
-  def createThriftStructs(A: Type, x: c.Tree, me: c.universe.TermName, optionMe: c.universe.TermName) {
-    decoderCache.addOne(DecoderCache(A, me, q"???", optionMe))
+  private def isOption(tpe: Type) =
+    tpe.typeSymbol.fullName == "scala.Option"
+
+  def createThriftStructs(A: Type, x: c.Tree, decodeMe: c.universe.TermName, decodeOptionMe: c.universe.TermName): DecoderDefinition = {
+    decoderCache(A) = DecoderDefinition(decodeMe, decodeOptionMe, q"???")
+
     val apply = getApplyMethod(A)
 
     case class ParamsData(forCompName: c.universe.TermName, decodeExpr: c.Tree, accDecodeExpr: c.Tree, decoderName: c.universe.TermName)
@@ -113,28 +121,20 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       val fresh = c.freshName(name)
 
       val decoderName: c.universe.TermName = {
-        if (
-          tpe.typeSymbol.fullName == "scala.Option" &&
-            tpe.typeArgs.nonEmpty && tpe.typeArgs.head <:< weakTypeOf[ThriftStruct] && !(tpe.typeArgs.head <:< weakTypeOf[ThriftUnion])
-        ) {
-          decoderCache.find(x => x.tpe == tpe.typeArgs.head).map { cachedValue =>
+
+        val interestingType = if (isOption(tpe)) tpe.typeArgs.head else tpe
+        val decoderName: c.universe.TermName = nameFromType(interestingType)
+        val optionDecoderName = nameFromTypeOption(interestingType)
+
+        if (interestingType <:< weakTypeOf[ThriftStruct] && !(interestingType <:< weakTypeOf[ThriftUnion])) {
+          val cachedValue = decoderCache.getOrElse(interestingType, createThriftStructs(interestingType, x, decoderName, optionDecoderName))
+          if (isOption(tpe))
             cachedValue.optionName
-          } getOrElse {
-            val decoderName: c.universe.TermName = nameFromType(tpe.typeArgs.head)
-            val optionDecoderName = nameFromTypeOption(tpe.typeArgs.head)
-            createThriftStructs(tpe.typeArgs.head, x, decoderName, optionDecoderName)
-            optionDecoderName
-          }
-        } else if (tpe <:< weakTypeOf[ThriftStruct] && !(tpe <:< weakTypeOf[ThriftUnion])) {
-          val decoderName: c.universe.TermName = nameFromType(tpe.typeArgs.head)
-          val optionDecoderName = nameFromTypeOption(tpe.typeArgs.head)
-          createThriftStructs(tpe, x, decoderName, optionDecoderName)
-          decoderName
+          else
+            cachedValue.name
         } else {
-          val d = getImplicitDecoder(tpe)
-          val decoderName: c.universe.TermName = nameFromType(tpe)
-          val optionDecoderName = nameFromTypeOption(tpe)
-          decoderCache.addOne(DecoderCache(tpe, decoderName, d, optionDecoderName))
+          val implementation = getImplicitDecoder(tpe)
+          decoderCache(tpe) = DecoderDefinition(decoderName, optionDecoderName, implementation)
           decoderName
         }
       }
@@ -196,10 +196,9 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         c.warning(c.enclosingPosition, s"Decoder for ThriftStruct ${A.typeSymbol.name.toString} will not support accumulated errors for nested types because it has more than 22 parameters.")
         None
       }
-      None
     }
 
-    val decoder = q"""{
+    val implementation = q"""{
       new _root_.io.circe.Decoder[$A] {
         import cats.syntax.apply._
         import cats.syntax.either._
@@ -214,19 +213,9 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       }
     }"""
 
-    val optionDecoder =
-      q"""
-        { new _root_.io.circe.Decoder[Option[$A]] {
-          def apply(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[Option[$A]] = {
-            if (cursor.value.isNull) Right(None)
-            else decoder(cursor).map(Some.apply)
-          }
-        }
-        }
-       """
-
-    decoderCache.filterInPlace(_.tpe != A)
-    decoderCache.addOne(DecoderCache(A, me, decoder, optionMe))
+    val entry = DecoderDefinition(decodeMe, decodeOptionMe, implementation)
+    decoderCache(A) = entry
+    entry
   }
 
   /**
