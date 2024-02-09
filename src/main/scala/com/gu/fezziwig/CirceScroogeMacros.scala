@@ -37,7 +37,8 @@ object CustomDecoders {
 private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
   import c.universe._
 
-  println("initialising class")
+  case class DecoderCache(_class: Type, name: c.universe.TermName, tree: Option[c.universe.Tree], optionName: c.universe.TermName)
+  val decoderCache = scala.collection.mutable.ListBuffer[DecoderCache]()
   /**
     * Macro to provide custom decoding of Thrift structs using the companion object's `apply` method.
     *
@@ -68,59 +69,104 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     * }}}
     */
 
+    def optionWrapped(A: Type, decoder: TermName) =
+    q"""
+        { new _root_.io.circe.Decoder[Option[$A]] {
+          def apply(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[Option[$A]] = {
+            if (cursor.value.isNull) Right(None)
+            else $decoder(cursor).map(Some.apply)
+          }
+        }
+        }
+       """
   def decodeThriftStruct[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
     val A = weakTypeOf[A]
-    println(s"External creating decoder for $A")
-    val z = decodeThriftStructGeneric(A, x)
-    println(z)
-    z
+    val z = decodeThriftStructGeneric(A, x, nameFromType(A), nameFromTypeOption(A))
+    val marker: c.universe.TermName = TermName(c.freshName)
+//    println(z)
+    val dependencies = decoderCache.flatMap({ x =>
+      List(
+        x.tree.map(tree => q"""def ${x.name}: Decoder[${x._class}] = $tree"""),
+        Some(q"""def ${x.optionName}: Decoder[Option[${x._class}]] = ${optionWrapped(x._class, x.name)}""")
+      ).flatten
+    })
+    val test = q"""
+       val beforeDependencies = ""
+       ..${dependencies}
+       val afterDependencies = ""
+       $z
+     """
+    println("----------------------")
+    println(c.enclosingPosition)
+    println(s"Decoder for $A:")
+    println(test)
+    println(decoderCache.map(x => s"${x.name}\t${x.optionName}").mkString("\n"))
+    test
   }
 
+  private def nameFromType(tpe: Type) =
+    TermName(c.freshName(tpe.toString.replace("[","_").replace("]", "_")))
+
+  private def nameFromTypeOption(tpe: Type) =
+    TermName(c.freshName("option_" + tpe.toString.replace("[","_").replace("]", "_")))
+
   // refactor so that all implicit whatsits are creatde as named things that are used later to make code more penetrable
-  def decodeThriftStructGeneric(A: Type, x: c.Tree, serialisers: List[(String, c.universe.TermName)] = List.empty, optionWrapped: Boolean = false): c.Tree = {
+  def decodeThriftStructGeneric(A: Type, x: c.Tree, me: c.universe.TermName, optionMe: c.universe.TermName, optionWrapped: Boolean = false): c.Tree = {
     //println(s"Creating decoder for $A")
-    val me: c.universe.TermName = TermName(c.freshName)
+
+    decoderCache.addOne(DecoderCache(A, me, None, optionMe))
     val apply = getApplyMethod(A)
 
-    var decoderFound = false
-    val params = apply.paramLists.head.zipWithIndex.map { case (param, i) =>
+    case class ParamsData(forCompName: c.universe.TermName, decodeExpr: c.Tree, accDecodeExpr: c.Tree, decoderName: c.universe.TermName, optionDecoderName: c.universe.TermName)
+
+    val params: List[ParamsData] = apply.paramLists.head.zipWithIndex.map { case (param, i) =>
       val name = param.name
       val tpe = param.typeSignature
       val fresh = c.freshName(name)
 
-      val decoder: c.Tree = {        // If this is a recursive optional field then decode using `this`
-        if (tpe.typeSymbol.fullName == "scala.Option" && tpe.typeArgs.headOption.contains(A)) {
-          q"io.circe.Decoder.decodeOption[${tpe.typeArgs.head}](this)"
-        } else if (
+      val (decoderTree, decoderName, optionDecoderName): (c.Tree, c.universe.TermName, c.universe.TermName) = {        // If this is a recursive optional field then decode using `this`
+//        if (tpe.typeSymbol.fullName == "scala.Option" && tpe.typeArgs.headOption.contains(A)) {
+//          q"io.circe.Decoder.decodeOption[${tpe.typeArgs.head}](this)"
+//        } else
+        if (
           tpe.typeSymbol.fullName == "scala.Option" &&
             tpe.typeArgs.nonEmpty && tpe.typeArgs.head <:< weakTypeOf[ThriftStruct] && !(tpe.typeArgs.head <:< weakTypeOf[ThriftUnion])
         ) {
           //println(s"generic decode - ${tpe.toString} ${tpe.typeArgs.head}")
-          if (serialisers.find(x => x._1 == tpe.typeArgs.head.toString).isDefined) {
-            val t = q"""${serialisers.find(x => x._1 == tpe.typeArgs.head.toString).head._2}"""
-            decoderFound = true
+          if (decoderCache.find(x => x._class == tpe.typeArgs.head).isDefined) {
+            val cache = decoderCache.find(x => x._class == tpe.typeArgs.head).get
+            val t = q"""${cache.name}"""
             //println(s"Serialising $A, param ${tpe.typeArgs.head}")
             //println(t)
 
-            t
+            //(t, cache.name, cache.optionName)
+            (t, cache.optionName, cache.optionName)
             //q"com.gu.fezziwig.CustomDecoders.decodeThriftStructOption[${tpe.typeArgs.head}]"
           } else {
-            decodeThriftStructGeneric(tpe.typeArgs.head, x, (A.toString -> me) :: serialisers, true)
+            val other: c.universe.TermName = nameFromType(tpe.typeArgs.head)
+            val optionName = nameFromTypeOption(tpe.typeArgs.head)
+            (decodeThriftStructGeneric(tpe.typeArgs.head, x, other, optionName,true), optionName, optionName)
 
             //q"com.gu.fezziwig.CustomDecoders.decodeThriftStructOption[${tpe.typeArgs.head}]"
           }
         } else if (tpe <:< weakTypeOf[ThriftStruct] && !(tpe <:< weakTypeOf[ThriftUnion])) {
   //        println(s"generic decode - ${tpe.toString}")
-          decodeThriftStructGeneric(tpe, x, (A.toString -> me) :: serialisers)
+          val other: c.universe.TermName = nameFromType(tpe.typeArgs.head)
+          val optionName = nameFromTypeOption(tpe.typeArgs.head)
+          (decodeThriftStructGeneric(tpe, x, other, optionName), other, optionName)
         } else {
-          getImplicitDecoder(tpe)
+          val d = getImplicitDecoder(tpe)
+          val name: c.universe.TermName = nameFromType(tpe)
+          val optionName = nameFromTypeOption(tpe)
+          decoderCache.addOne(DecoderCache(tpe, name, Some(d), optionName))
+          (d, name, optionName)
         }
       }
 
     val decodeExpr = {
         val decodeParam =
           q"""cursor.downField(${name.toString}).success
-            .map(x => x.as[$tpe]($decoder))"""
+            .map(x => x.as[$tpe]($decoderName))"""
 
         if (param.asTerm.isParamWithDefault) {
           /**
@@ -140,11 +186,11 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
           * If we try to use the same tree twice, the compiler may blow up with the following helpful error message:
           *   `scala.reflect.internal.Types$TypeError: value <none> is not a member of com.gu.fezziwig.FezziwigTests`
           */
-        val decoderCopy = c.untypecheck(decoder)
+        //val decoderCopy = c.untypecheck(decoderTree)
 
         val accDecodeParam =
           q"""cursor.downField(${name.toString}).success
-            .map(x => $decoderCopy.decodeAccumulating(x))"""
+            .map(x => $decoderName.decodeAccumulating(x))"""
 
         if (param.asTerm.isParamWithDefault) {
           val defaultValue = A.companion.member(TermName("apply$default$" + (i + 1)))
@@ -154,7 +200,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         }
       }
 
-      (fresh, decodeExpr, accDecodeExpr)
+      ParamsData(fresh.toTermName, decodeExpr, accDecodeExpr, decoderName, optionDecoderName)
     }
 
     /**
@@ -162,24 +208,25 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       * This is only supported for structs with <= 22 parameters.
       */
     val accumulating: Option[Tree] = {
-      if (params.length <= 22) {
-
-        val validationExpression = params.map(_._3) match {
-          case a :: Nil => q"""$a.map($apply)"""  //Tuple1 is not supported
-          case Nil => q"""$apply"""
-          case exprs => q"""(..$exprs).mapN($apply)"""
-        }
-
-        Some(q"""
-          override def decodeAccumulating(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.AccumulatingResult[$A] = {
-            cursor.value.asObject.map(_ => $validationExpression)
-              .getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Expected an object", cursor.history)))
-          }
-        """)
-      } else {
-        c.warning(c.enclosingPosition, s"Decoder for ThriftStruct ${A.typeSymbol.name.toString} will not support accumulated errors for nested types because it has more than 22 parameters.")
-        None
-      }
+//      if (params.length <= 22) {
+//
+//        val validationExpression = params.map(_.accDecodeExpr) match {
+//          case a :: Nil => q"""$a.map($apply)"""  //Tuple1 is not supported
+//          case Nil => q"""$apply"""
+//          case exprs => q"""(..$exprs).mapN($apply)"""
+//        }
+//
+//        Some(q"""
+//          override def decodeAccumulating(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.AccumulatingResult[$A] = {
+//            cursor.value.asObject.map(_ => $validationExpression)
+//              .getOrElse(_root_.cats.data.Validated.invalidNel(_root_.io.circe.DecodingFailure("Expected an object", cursor.history)))
+//          }
+//        """)
+//      } else {
+//        c.warning(c.enclosingPosition, s"Decoder for ThriftStruct ${A.typeSymbol.name.toString} will not support accumulated errors for nested types because it has more than 22 parameters.")
+//        None
+//      }
+      None
     }
 
     val decoder = q"""{
@@ -189,8 +236,8 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         def apply(cursor: _root_.io.circe.HCursor): _root_.io.circe.Decoder.Result[$A] = {
           for (..${
       fq"""_ <- Either.fromOption(cursor.value.asObject, _root_.io.circe.DecodingFailure("Expected an object", cursor.history))""" +:
-        params.map(_._2)
-    }) yield $apply(..${params.map(_._1)})
+        params.map(_.decodeExpr)
+    }) yield $apply(..${params.map(_.forCompName)})
         }
 
         ${accumulating.getOrElse(q"")}
@@ -208,24 +255,34 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         }
        """
 
+    decoderCache.filterInPlace(_._class != A)
+    //decoderCache.zipWithIndex.find()
+    decoderCache.addOne(DecoderCache(A, me, Some(decoder), optionMe))
     val test = if (optionWrapped) {
+//      q"""{
+//        val decoder = $decoder
+//        val $me: _root_.io.circe.Decoder[Option[$A]] = $optionDecoder
+//        $me
+//      }"""
       q"""{
-        val decoder = $decoder
-        val $me: _root_.io.circe.Decoder[Option[$A]] = $optionDecoder
-        $me
+        $optionDecoder
       }"""
     } else {
+//      q"""{
+//          val decoder = $decoder
+//        val $me: _root_.io.circe.Decoder[Option[$A]]  = $optionDecoder
+//
+//        decoder
+//        }"""
       q"""{
-          val decoder = $decoder
-        val $me: _root_.io.circe.Decoder[Option[$A]]  = $optionDecoder
-
-        decoder
+        $me
         }"""
     }
+//    println(decoderCache)
 //    println("----------")
 //    println(test)
 //    println("----------")
-    println(s"Done creating decoder for $A")
+//    println(s"Done creating decoder for $A")
     test
   }
 
