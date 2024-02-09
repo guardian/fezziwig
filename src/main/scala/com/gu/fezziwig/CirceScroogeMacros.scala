@@ -3,8 +3,7 @@ package com.gu.fezziwig
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox
 import com.twitter.scrooge.{ThriftEnum, ThriftStruct, ThriftUnion}
-import io.circe.Decoder.Result
-import io.circe.{Decoder, Encoder, HCursor}
+import io.circe.{Decoder, Encoder}
 import shapeless.{Lazy, |¬|}
 
 /**
@@ -12,20 +11,16 @@ import shapeless.{Lazy, |¬|}
   */
 
 object CirceScroogeMacros {
-  type NotUnion[T] = |¬|[ThriftUnion]#λ[T]  //For telling the compiler not to use certain macros for thrift Unions
-
   /**
     * The macro bundle magic happens here.
     * Note - intellij doesn't like the references to methods in an uninstantiated class, but it does compile.
     */
 
-  implicit def decodeThriftStruct[A <: ThriftStruct]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftStruct[A]
+  implicit def decodeThriftStructOrUnion[A <: ThriftStruct]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftStruct[A]
   implicit def decodeThriftEnum[A <: ThriftEnum]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftEnum[A]
-  //implicit def decodeThriftUnion[A <: ThriftUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftUnion[A]
 
-//  implicit def encodeThriftStruct[A <: ThriftStruct : NotUnion]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftStruct[A]
-//  implicit def encodeThriftEnum[A <: ThriftEnum]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftEnum[A]
-//  implicit def encodeThriftUnion[A <: ThriftUnion]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftUnion[A]
+  implicit def encodeThriftStructOrUnion[A <: ThriftStruct]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftStruct[A]
+  implicit def encodeThriftEnum[A <: ThriftEnum]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftEnum[A]
 }
 
 private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
@@ -33,7 +28,11 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
   case class DecoderDefinition(name: c.universe.TermName, optionName: c.universe.TermName, implementation: c.universe.Tree)
 
+  case class EncoderDefinition(name: c.universe.TermName, implementation: c.universe.Tree)
+
   val decoderCache = scala.collection.mutable.Map[Type, DecoderDefinition]()
+
+  val encoderCache = scala.collection.mutable.Map[Type, EncoderDefinition]()
 
   /**
     * Macro to provide custom decoding of Thrift structs using the companion object's `apply` method.
@@ -137,7 +136,6 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
    *   }}}
    *
    */
-
 
   private def nameFromType(tpe: Type) = {
     TermName(c.freshName(tpe.toString))
@@ -312,40 +310,52 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     entry
   }
 
-  def encodeThriftStruct[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
+  def encodeThriftStruct[A: c.WeakTypeTag]: c.Tree = {
     val A = weakTypeOf[A]
+    val encoderName = nameFromType(A)
+    if (A <:< weakTypeOf[ThriftUnion])
+      createThriftUnionEncoder(A, encoderName)
+    else
+      createThriftStructEncoder(A, encoderName)
+    val dependencies = encoderCache.map({ case (tpe, cacheEntry) =>
+      q"""def ${cacheEntry.name}: Encoder[${tpe}] = ${cacheEntry.implementation}"""
+    })
+    q"""
+       ..${dependencies}
+       $encoderName
+    """
+  }
+
+  def createThriftStructEncoder(A: Type, encodeMe: c.universe.TermName): EncoderDefinition = {
+    encoderCache(A) = EncoderDefinition(encodeMe, q"???")
     val apply = getApplyMethod(A)
 
     val pairs = apply.paramLists.head.map { param =>
       val name = param.name
       /**
-        * We need to ignore any optional fields which are None, because they'll be included in the result as JNulls.
-        */
+       * We need to ignore any optional fields which are None, because they'll be included in the result as JNulls.
+       */
       val (tpe, isOption) = param.typeSignature match {
         case TypeRef(_, sym, ps) if sym == typeOf[Option[_]].typeSymbol => (ps.head, true)
         case other => (other, false)
       }
 
-      val encoder: c.Tree = {
-        // if this is a recursive optional field then encode using `this`
-        if (isOption && tpe == A) {
-          q"this"
-        } else {
-          getImplicitEncoder(tpe)
-        }
-      }
+      val encoder: c.TermName = getImplicitEncoder(tpe)
 
       if (isOption) q"""thrift.${name.toTermName}.map(${name.toString} -> $encoder.apply(_))"""
       else q"""_root_.scala.Some(${name.toString} -> $encoder.apply(thrift.${name.toTermName}))"""
     }
 
-    q"""{
+    val implementation = q"""{
        new _root_.io.circe.Encoder[$A] {
           def apply(thrift: $A): _root_.io.circe.Json = {
             _root_.io.circe.Json.fromFields($pairs.flatten)
           }
         }
      }"""
+    val entry = EncoderDefinition(encodeMe, implementation)
+    encoderCache(A) = entry
+    entry
   }
 
   /**
@@ -369,9 +379,8 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     """
   }
 
-  def encodeThriftUnion[A: c.WeakTypeTag]: c.Tree = {
-    val A = weakTypeOf[A]
-
+  def createThriftUnionEncoder(A: Type, encodeMe: c.universe.TermName): EncoderDefinition = {
+    encoderCache(A) = EncoderDefinition(encodeMe, q"???")
     val memberClasses: Iterable[Symbol] = getUnionMemberClasses(A)
 
     val encoderCases: Iterable[Tree] = memberClasses.map { memberClass =>
@@ -380,16 +389,19 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       val param: Symbol = applyMethod.paramLists.headOption.flatMap(_.headOption).getOrElse(c.abort(c.enclosingPosition, s"Not a valid union class: could not find the member class' parameter (${A.typeSymbol.fullName})"))
       val paramType = param.typeSignature.dealias
 
-      val implicitEncoderForParam: c.Tree = getImplicitEncoder(paramType)
+      val implicitEncoderForParam: c.TermName = getImplicitEncoder(paramType)
 
       cq"""data: $memberClass => Json.obj(${param.name.toString} -> $implicitEncoderForParam.apply(data.${param.name.toTermName}))"""
     }
 
-    q"""
+    val implementation = q"""
       _root_.io.circe.Encoder.instance {
         case ..${encoderCases ++ Seq(cq"""_ => _root_.io.circe.Json.Null""")}
       }
     """
+    val entry = EncoderDefinition(encodeMe, implementation)
+    encoderCache(A) = entry
+    entry
   }
 
   private def getApplyMethod(tpe: Type): MethodSymbol = {
@@ -451,17 +463,33 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
   }
 
-  private def getImplicitEncoder(tpe: Type): c.Tree = {
-    val encoderForType = appliedType(weakTypeOf[Encoder[_]].typeConstructor, tpe)
-    val normalImplicitEncoder = c.inferImplicitValue(encoderForType)
-    if (normalImplicitEncoder.nonEmpty) {
-      normalImplicitEncoder
-    } else {
-      val lazyEncoderForType = appliedType(weakTypeOf[Lazy[_]].typeConstructor, encoderForType)
-      val implicitLazyEncoder = c.inferImplicitValue(lazyEncoderForType)
-      if (implicitLazyEncoder.isEmpty) c.abort(c.enclosingPosition, s"Could not find an implicit Encoder[$tpe] even after resorting to Lazy")
+  private def getImplicitEncoder(tpe: Type): c.TermName = {
 
-      q"_root_.scala.Predef.implicitly[_root_.shapeless.Lazy[_root_.io.circe.Encoder[$tpe]]].value"
-    }
+    val encoderName: c.universe.TermName = nameFromType(tpe)
+
+    val cachedValue = encoderCache.getOrElse(tpe, {
+      if (tpe <:< weakTypeOf[ThriftStruct]) {
+        if (tpe <:< weakTypeOf[ThriftUnion])
+          createThriftUnionEncoder(tpe, encoderName)
+        else
+          createThriftStructEncoder(tpe, encoderName)
+      } else {
+        val encoderForType = appliedType(weakTypeOf[Encoder[_]].typeConstructor, tpe)
+        val normalImplicitEncoder = c.inferImplicitValue(encoderForType)
+        val implementation = if (normalImplicitEncoder.nonEmpty) {
+          normalImplicitEncoder
+        } else {
+          val lazyEncoderForType = appliedType(weakTypeOf[Lazy[_]].typeConstructor, encoderForType)
+          val implicitLazyEncoder = c.inferImplicitValue(lazyEncoderForType)
+          if (implicitLazyEncoder.isEmpty) c.abort(c.enclosingPosition, s"Could not find an implicit Encoder[$tpe] even after resorting to Lazy")
+
+          q"_root_.scala.Predef.implicitly[_root_.shapeless.Lazy[_root_.io.circe.Encoder[$tpe]]].value"
+        }
+        val definition = EncoderDefinition(encoderName, implementation)
+        encoderCache(tpe) = definition
+        definition
+      }
+    })
+    cachedValue.name
   }
 }

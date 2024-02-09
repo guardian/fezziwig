@@ -55,80 +55,78 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
     val jsonBefore: Json = parse(jsonString).toOption.get
 
     val decoded: StructA = jsonBefore.as[StructA].toOption.get
-    println(s"The s in A->C is ${decoded.x.map(_.s)}")
-    println(s"The s in A->C->A->C is ${decoded.x.flatMap(_.x.flatMap(_.x.map(_.s)))}")
 
-//    val jsonAfter: Json = decoded.asJson
-//
-//    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
-//    if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
-//    diffJ should be(JsonPatch(Nil))
+    val jsonAfter: Json = decoded.asJson
+
+    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
+    if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
+    diffJ should be(JsonPatch(Nil))
     true should be(true)
   }
 
-//  it should "accumulate errors" in {
-//    //In the following json, the fields 's', 'foo' and 'x' have incorrect types
-//    val expectedFailures = List(
-//      DecodingFailure("String", List(DownField("s"), DownField("c"), DownField("u"), DownField("b"))),
-//      DecodingFailure("String", List(DownField("foo"))),
-//      DecodingFailure("Expected an object", List(DownField("x")))
-//    )
-//
-//    val jsonString =
-//      """
-//        |{
-//        |  "b": {
-//        |    "u": {
-//        |      "c": {
-//        |        "s": 1
-//        |      }
-//        |    }
-//        |  },
-//        |  "foo": 1,
-//        |  "bar": 3,
-//        |  "e": "ENUM_A",
-//        |  "intMap": {
-//        |    "k": [2]
-//        |  },
-//        |  "x": 2
-//        |}
-//      """.stripMargin
-//
-//    val dec = Decoder[StructA]
-//
-//    val jsonBefore: Json = parse(jsonString).toOption.get
-//
-//    val result = dec.decodeAccumulating(jsonBefore.hcursor)
-//
-//    result.isInvalid should be(true)
-//    result.swap.foreach(nel => {
-//      nel.toList.length should be(3)
-//      nel.toList should be(expectedFailures)
-//    })
-//  }
-//
-//  it should "round-trip recursive structs" in {
-//    implicit val dec = Decoder[RecursiveStruct]
-//    implicit val enc = Encoder[RecursiveStruct]
-//
-//    val jsonString =
-//      """
-//        |{
-//        |  "foo": "outer-foo",
-//        |  "recursiveStruct": {
-//        |    "foo": "nested-foo"
-//        |  }
-//        |}
-//      """.stripMargin
-//
-//    val jsonBefore: Json = parse(jsonString).toOption.get
-//
-//    val decoded: RecursiveStruct = jsonBefore.as[RecursiveStruct].toOption.get
-//
-//    val jsonAfter: Json = decoded.asJson
-//
-//    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
-//    if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
-//    diffJ should be(JsonPatch(Nil))
-//  }
+  it should "accumulate errors" in {
+    //In the following json, the fields 's', 'foo' and 'x' have incorrect types
+    val expectedFailures = List(
+      DecodingFailure("String", List(DownField("s"), DownField("c"), DownField("u"), DownField("b"))),
+      DecodingFailure("String", List(DownField("foo"))),
+      DecodingFailure("Expected an object", List(DownField("x")))
+    )
+
+    val jsonString =
+      """
+        |{
+        |  "b": {
+        |    "u": {
+        |      "c": {
+        |        "s": 1
+        |      }
+        |    }
+        |  },
+        |  "foo": 1,
+        |  "bar": 3,
+        |  "e": "ENUM_A",
+        |  "intMap": {
+        |    "k": [2]
+        |  },
+        |  "x": 2
+        |}
+      """.stripMargin
+
+    val dec = Decoder[StructA]
+
+    val jsonBefore: Json = parse(jsonString).toOption.get
+
+    val result = dec.decodeAccumulating(jsonBefore.hcursor)
+
+    result.isInvalid should be(true)
+    result.swap.foreach(nel => {
+      nel.toList.length should be(3)
+      nel.toList should be(expectedFailures)
+    })
+  }
+
+  it should "round-trip recursive structs" in {
+    implicit val dec = Decoder[RecursiveStruct]
+    implicit val enc = Encoder[RecursiveStruct]
+
+    val jsonString =
+      """
+        |{
+        |  "foo": "outer-foo",
+        |  "recursiveStruct": {
+        |    "foo": "nested-foo"
+        |  }
+        |}
+      """.stripMargin
+
+    val jsonBefore: Json = parse(jsonString).toOption.get
+
+    val decoded: RecursiveStruct = jsonBefore.as[RecursiveStruct].toOption.get
+
+    val jsonAfter: Json = decoded.asJson
+
+    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
+    if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
+    diffJ should be(JsonPatch(Nil))
+  }
 }
