@@ -58,13 +58,33 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
   implicit val outerEncoder: Encoder[OuterStruct] = deriveEncoder
   implicit val innerEncoder: Encoder[InnerStruct] = deriveEncoder
+  implicit val outerDecoder: Decoder[OuterStruct] = deriveDecoder
+  implicit val innerDecoder: Decoder[InnerStruct] = deriveDecoder
 
   it should "round-trip scrooge thrift models [outer]" in {
-    val decoded: OuterStruct = OuterStruct("hello", Some(InnerStruct(Some(OuterStruct("oh", None)))))
+    val jsonString =
+      """
+        |{
+        |  "foo" : "hello",
+        |  "inner" : {
+        |    "outer" : {
+        |      "foo" : "oh",
+        |      "inner" : null
+        |    }
+        |  }
+        |}
+      """.stripMargin
+    // val decoded: OuterStruct = OuterStruct("hello", Some(InnerStruct(Some(OuterStruct("oh", None)))))
+
+    val jsonBefore: Json = parse(jsonString).toOption.get
+
+    val decoded: OuterStruct = jsonBefore.as[OuterStruct].toOption.get
 
     val jsonAfter: Json = decoded.asJson
 
-    jsonAfter shouldBe("")
+    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
+    if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
+    diffJ should be(JsonPatch(Nil))
   }
 
   // it should "round-trip scrooge thrift models" in {
