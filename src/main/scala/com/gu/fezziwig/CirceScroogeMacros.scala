@@ -155,6 +155,62 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
   }
 
   /**
+   * Like 'decodeThriftStruct', but using an alternate approach: don’t create
+   * the Decoder itself, instead create an implicit conversion to shapeless’
+   * 'LabelledGeneric', which circe can then handle using semi-automatic
+   * derivation.
+   */
+  def decodeThriftStructShapeless[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
+    val A = weakTypeOf[A]
+    val apply = getApplyMethod(A)
+    val params = apply.paramLists.head
+    val witnesses: List[c.Tree] = params.map(
+      param => {
+        val name = param.name
+        val witnessName = TermName(s"${name.toString()}Witness")
+        val symbolString = name.toString()
+        q"""val ${witnessName} = _root_.shapeless.Witness(_root_.scala.Symbol(${symbolString}))"""
+      }
+    )
+    val reprType: c.Tree = params.foldRight[c.Tree](q"""_root_.shapeless.HNil""") { case (param, acc) =>
+      val witnessName = TermName(s"${param.name}Witness")
+      q"""_root_.shapeless.::[_root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature}], $acc]"""
+    }
+    val reprTypeName = TypeName(s"${A.toString()}Repr")
+    val reprTypeSynonym = q"""type ${reprTypeName} = ${reprType}"""
+    val generic: c.Tree = {
+      val hlist = params.foldRight[c.Tree](q"""_root.shapeless.HNil""") { case (param, acc) =>
+        val paramName = TermName(s"${param.name.toString()}")
+        q"""_root_.shapeless.::(${paramName}, $acc)"""
+      }
+     val labelledFields = params.map(param => {
+         val paramName = TermName(param.name.toString())
+         val witnessName = TermName(s"${param.name.toString()}Witness")
+         q"""val ${paramName}: _root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature}] = _root_.shapeless.labelled.field(struct.${paramName})"""
+       }
+     )
+      q"""implicit def generic: _root_.shapeless.LabelledGeneric.Aux[$A, $reprTypeName] = {
+        new _root_.shapeless.LabelledGeneric[$A] {
+          type Repr = $reprTypeName
+
+          def to(struct: $A): Repr = {
+            ..$labelledFields
+            $hlist
+          }
+
+          def from(hlist: Repr): $A = hlist match {
+            case $hlist => $apply(..${params.map(p => p.name)})
+          }
+        }
+      }"""
+    }
+    val encoder = q"""implicit val encoder: Encoder[$A] = _root_.io.circe.generic.semiauto.deriveEncoder"""
+    val decoder = q"""implicit val decoder: Decoder[$A] = _root_.io.circe.generic.semiauto.deriveDecoder"""
+    val all: List[c.Tree] = List(reprTypeSynonym, generic, encoder, decoder)
+    q"""..${witnesses}..${all}"""
+  }
+
+  /**
     * Scrooge removes underscores from Thrift enum values.
     */
   def decodeThriftEnum[A: c.WeakTypeTag]: c.Tree = {
