@@ -79,8 +79,8 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
   def makeEncoder[T, R](toF: T => R, fromF: R => T)(implicit encode: ReprAsObjectEncoder[R]): Encoder[T] = {
     val generic = new LabelledGeneric[T] {
       type Repr = R
-      def to = toF
-      def from = fromF
+      def to(t: T) = toF(t)
+      def from(r: R) = fromF(r)
     }
     val derived: DerivedAsObjectEncoder[T] = DerivedAsObjectEncoder.deriveEncoder(generic, encode)
     deriveEncoder(derived)
