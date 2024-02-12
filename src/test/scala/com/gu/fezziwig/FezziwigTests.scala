@@ -39,35 +39,27 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
     }
   }
 
-  val outerWitness = Witness(Symbol("outer"))
-  type InnerRepr = labelled.FieldType[outerWitness.T, Option[OuterStruct]] :: HNil
+  val somethingWitness = Witness(Symbol("something"))
+  type InnerRepr = labelled.FieldType[somethingWitness.T, String] :: HNil
 
   def innerGeneric: LabelledGeneric.Aux[InnerStruct, InnerRepr] = {
     new LabelledGeneric[InnerStruct] {
       type Repr = InnerRepr
 
       def to(is: InnerStruct): Repr = {
-        val outer: labelled.FieldType[outerWitness.T, Option[OuterStruct]] = labelled.field(is.outer)
-        outer :: HNil
+        val something: labelled.FieldType[somethingWitness.T, String] = labelled.field(is.something)
+        something :: HNil
       }
       def from(hlist: Repr): InnerStruct = hlist match {
-        case outer :: HNil => InnerStruct(outer)
+        case something :: HNil => InnerStruct(something)
       }
     }
   }
 
-  val outerEncode: ReprAsObjectEncoder[OuterRepr] = ReprAsObjectEncoder.deriveReprAsObjectEncoder
-  val outerDerived: DerivedAsObjectEncoder[OuterStruct] = DerivedAsObjectEncoder.deriveEncoder(outerGeneric, outerEncode)
-  val outerEncoder: Encoder[OuterStruct] = deriveEncoder(outerDerived)
-
-  val innerEncode: ReprAsObjectEncoder[InnerRepr] = ReprAsObjectEncoder.deriveReprAsObjectEncoder
-  val innerDerived: DerivedAsObjectEncoder[InnerStruct] = DerivedAsObjectEncoder.deriveEncoder(innerGeneric, innerEncode)
-  val innerEncoder: Encoder[InnerStruct] = deriveEncoder(innerDerived)
-
   it should "round-trip scrooge thrift models [outer]" in {
-    val decoded: OuterStruct = OuterStruct("hello", Some(InnerStruct(Some(OuterStruct("oh", None)))))
+    val decoded: OuterStruct = OuterStruct("hello", Some(InnerStruct("oh")))
 
-    val jsonAfter: Json = outerEncoder(decoded)
+    val jsonAfter: Json = decoded.asJson
 
     jsonAfter shouldBe("")
   }

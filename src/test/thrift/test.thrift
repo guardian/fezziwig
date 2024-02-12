@@ -37,6 +37,6 @@ struct OuterStruct {
 }
 
 struct InnerStruct {
-    # 1: required string something
-    1: optional OuterStruct outer
+    1: required string something
+    # 1: optional OuterStruct outer
 }
