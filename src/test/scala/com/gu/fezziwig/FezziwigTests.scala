@@ -18,84 +18,51 @@ import io.circe.generic.encoding.ReprAsObjectEncoder
 
 class FezziwigTests extends AnyFlatSpec with Matchers  {
 
-  implicit def outerGeneric(implicit gen: LabelledGeneric[Option[InnerStruct]]): LabelledGeneric[OuterStruct] = {
-    new LabelledGeneric[OuterStruct] {
-      val fooWitness = Witness(Symbol("foo"))
-      val innerWitness = Witness(Symbol("inner"))
+  val fooWitness = Witness(Symbol("foo"))
+  val innerWitness = Witness(Symbol("inner"))
 
-      type Repr =
-        labelled.FieldType[fooWitness.T, String] :: labelled.FieldType[innerWitness.T, gen.Repr] :: HNil
+  type OuterRepr =
+    labelled.FieldType[fooWitness.T, String] :: labelled.FieldType[innerWitness.T, Option[InnerStruct]] :: HNil
+
+  def outerGeneric: LabelledGeneric.Aux[OuterStruct, OuterRepr] = {
+    new LabelledGeneric[OuterStruct] {
+      type Repr = OuterRepr
 
       def to(os: OuterStruct): Repr = {
         val foo: labelled.FieldType[fooWitness.T,String] = labelled.field(os.foo)
-        val inner: labelled.FieldType[innerWitness.T, gen.Repr] = labelled.field(gen.to(os.inner))
+        val inner: labelled.FieldType[innerWitness.T, Option[InnerStruct]] = labelled.field(os.inner)
         foo :: inner :: HNil
       }
       def from(hlist: Repr): OuterStruct = hlist match {
-        case foo :: inner :: HNil => OuterStruct(foo, gen.from(inner))
+        case foo :: inner :: HNil => OuterStruct(foo, inner)
       }
     }
   }
 
-  implicit def innerGeneric(implicit gen: LabelledGeneric[Option[OuterStruct]]): LabelledGeneric[InnerStruct] = {
+  val outerWitness = Witness(Symbol("outer"))
+  type InnerRepr = labelled.FieldType[outerWitness.T, Option[OuterStruct]] :: HNil
+
+  def innerGeneric: LabelledGeneric.Aux[InnerStruct, InnerRepr] = {
     new LabelledGeneric[InnerStruct] {
-      val outerWitness = Witness(Symbol("outer"))
-      type Repr = labelled.FieldType[outerWitness.T, gen.Repr] :: HNil
+      type Repr = InnerRepr
 
       def to(is: InnerStruct): Repr = {
-        val outer: labelled.FieldType[outerWitness.T, gen.Repr] = labelled.field(gen.to(is.outer))
+        val outer: labelled.FieldType[outerWitness.T, Option[OuterStruct]] = labelled.field(is.outer)
         outer :: HNil
       }
       def from(hlist: Repr): InnerStruct = hlist match {
-        case outer :: HNil => InnerStruct(gen.from(outer))
+        case outer :: HNil => InnerStruct(outer)
       }
     }
   }
 
-  val tupleGeneric = LabelledGeneric[Tuple2[String, Int]]
-  val exampleGeneric = tupleGeneric.to(("hello", 1))
-  case class Example(foo: String, bar: Boolean)
-  val caseClassGeneric = LabelledGeneric[Example]
-  val fooWitness = Witness(Symbol("foo"))
-  val barWitness = Witness(Symbol("bar"))
-  type ExampleRepr = labelled.FieldType[fooWitness.T, String] :: labelled.FieldType[barWitness.T, Boolean] :: HNil
-  val exampleRecord: ExampleRepr = caseClassGeneric.to(Example("hello", true))
-  // val testEncodeRecord: ReprAsObjectEncoder[labelled.FieldType[fooWitness.T, String] :: labelled.FieldType[barWitness.T, Boolean] :: HNil] = ReprAsObjectEncoder.deriveReprAsObjectEncoder
-  val testEncodeRecord: ReprAsObjectEncoder[ExampleRepr] = implicitly
-  val genAuxExample: LabelledGeneric.Aux[Example, ExampleRepr] = implicitly
-  val exampleDerived: DerivedAsObjectEncoder[Example] = DerivedAsObjectEncoder.deriveEncoder(genAuxExample, testEncodeRecord)
+  val outerEncode: ReprAsObjectEncoder[OuterRepr] = ReprAsObjectEncoder.deriveReprAsObjectEncoder
+  val outerDerived: DerivedAsObjectEncoder[OuterStruct] = DerivedAsObjectEncoder.deriveEncoder(outerGeneric, outerEncode)
+  val outerEncoder: Encoder[OuterStruct] = deriveEncoder(outerDerived)
 
-  // val recordGeneric = LabelledGeneric[]
-  // val exampleRecordGeneric = recordGeneric.to()
-  val outerAux = outerGeneric
-  val testEncodeWorks: ReprAsObjectEncoder[HNil] = ReprAsObjectEncoder.deriveReprAsObjectEncoder
-  val hello = Witness(Symbol("hello"))
-  val testEncodeFails: ReprAsObjectEncoder[labelled.FieldType[hello.T, String] :: HNil] = ReprAsObjectEncoder.deriveReprAsObjectEncoder
-  val outerEncode = ReprAsObjectEncoder.deriveReprAsObjectEncoder
-  val outerDerived: DerivedAsObjectEncoder[OuterStruct] = DerivedAsObjectEncoder.deriveEncoder(outerAux, outerEncode)
-  implicit val outerEncoder: Encoder[OuterStruct] = deriveEncoder(outerDerived)
-  implicit val innerEncoder: Encoder[InnerStruct] = deriveEncoder
-
-  def makeEncoder[T, R](toF: T => R, fromF: R => T)(implicit encode: ReprAsObjectEncoder[R]): Encoder[T] = {
-    val generic = new LabelledGeneric[T] {
-      type Repr = R
-      def to(t: T) = toF(t)
-      def from(r: R) = fromF(r)
-    }
-    val derived: DerivedAsObjectEncoder[T] = DerivedAsObjectEncoder.deriveEncoder(generic, encode)
-    deriveEncoder(derived)
-  }
-  val exampleEncoder: Encoder[Example] = makeEncoder(caseClassGeneric.to, caseClassGeneric.from)
-  def exampleToRepr(e: Example): ExampleRepr = {
-    val foo: labelled.FieldType[fooWitness.T, String] = labelled.field(e.foo)
-    val bar: labelled.FieldType[barWitness.T, Boolean] = labelled.field(e.bar)
-    foo :: bar :: HNil
-  }
-  def exampleFromRepr(r: ExampleRepr): Example = r match {
-    case foo :: bar :: HNil => Example(foo, bar)
-  }
-  val otherExampleEncoder: Encoder[Example] = makeEncoder(exampleToRepr, exampleFromRepr)
-  val outerEncoderAgain: Encoder[OuterStruct] = makeEncoder(outerGeneric.to, outerGeneric.from)
+  val innerEncode: ReprAsObjectEncoder[InnerRepr] = ReprAsObjectEncoder.deriveReprAsObjectEncoder
+  val innerDerived: DerivedAsObjectEncoder[InnerStruct] = DerivedAsObjectEncoder.deriveEncoder(innerGeneric, innerEncode)
+  val innerEncoder: Encoder[InnerStruct] = deriveEncoder(innerDerived)
 
   it should "round-trip scrooge thrift models [outer]" in {
     val decoded: OuterStruct = OuterStruct("hello", Some(InnerStruct(Some(OuterStruct("oh", None)))))
