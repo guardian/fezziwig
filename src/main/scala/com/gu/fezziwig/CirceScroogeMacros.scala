@@ -23,10 +23,6 @@ object CirceScroogeMacros {
     * Note - intellij doesn't like the references to methods in an uninstantiated class, but it does compile.
     */
 
-  implicit def thriftStructRepr[A <: ThriftStruct : NotUnion]: Representation[A] = macro CirceScroogeMacrosImpl.thriftStructRepr[A]
-
-  implicit def thriftStructGeneric[A <: ThriftStruct : NotUnion, R <: HList]: LabelledGeneric.Aux[A, R] = macro CirceScroogeMacrosImpl.thriftStructGeneric[A, R]
-
   implicit def decodeThriftStruct[A <: ThriftStruct : NotUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftStructShapeless[A]
   implicit def decodeThriftEnum[A <: ThriftEnum]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftEnum[A]
   implicit def decodeThriftUnion[A <: ThriftUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftUnion[A]
@@ -163,20 +159,13 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
   }
 
-  def thriftStructRepr[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
-    val A = weakTypeOf[A]
-    val apply = getApplyMethod(A)
-    val params = apply.paramLists.head
-    val reprType: c.Tree = params.foldRight[c.Tree](q"""_root_.shapeless.HNil""") { case (param, acc) =>
-      val witnessName = TermName(s"${param.name}Witness")
-      q"""_root_.shapeless.::[_root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature}], $acc]"""
-    }
-    q"""new _root_.com.gu.fezziwig.Representation {
-      type R = ${reprType}
-     }"""
-  }
-
-  def thriftStructGeneric[A: c.WeakTypeTag, R: c.WeakTypeTag](x: c.Tree): c.Tree = {
+  /**
+   * Like 'decodeThriftStruct', but using an alternate approach: don’t create
+   * the Decoder itself, instead create an implicit conversion to shapeless’
+   * 'LabelledGeneric', which circe can then handle using semi-automatic
+   * derivation.
+   */
+  def decodeThriftStructShapeless[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
     val A = weakTypeOf[A]
     val apply = getApplyMethod(A)
     val params = apply.paramLists.head
@@ -188,13 +177,18 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
         q"""val ${witnessName} = _root_.shapeless.Witness(_root_.scala.Symbol(${symbolString}))"""
       }
     )
-    val reprType: c.Tree = params.foldRight[c.Tree](q"""_root_.shapeless.HNil""") { case (param, acc) =>
+    val reprType: c.Tree = params.foldRight[c.Tree](tq"""_root_.shapeless.HNil""") { case (param, acc) =>
       val witnessName = TermName(s"${param.name}Witness")
-      q"""_root_.shapeless.::[_root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature}], $acc]"""
+      tq"""_root_.shapeless.::[_root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature}], $acc]"""
     }
-    val hlist = params.foldRight[c.Tree](q"""_root.shapeless.HNil""") { case (param, acc) =>
+    val hlist = params.foldRight[c.Tree](q"""_root_.shapeless.HNil""") { case (param, acc) =>
       val paramName = TermName(s"${param.name.toString()}")
       q"""_root_.shapeless.::(${paramName}, $acc)"""
+    }
+    // hlistPattern is identical to hlist but with the pq interpolator instead of q
+    val hlistPattern = params.foldRight[c.Tree](pq"""_root_.shapeless.HNil""") { case (param, acc) =>
+      val paramName = TermName(s"${param.name.toString()}")
+      pq"""_root_.shapeless.::(${paramName}, $acc)"""
     }
     val labelledFields = params.map(param => {
       val paramName = TermName(param.name.toString())
@@ -202,9 +196,8 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       q"""val ${paramName}: _root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature}] = _root_.shapeless.labelled.field(struct.${paramName})"""
       }
     )
-    val r = q"""
-    ..$witnesses
-    new _root_.shapeless.LabelledGeneric[$A] {
+    val labelledGeneric = q"""
+    implicit def generic: LabelledGeneric.Aux[$A, $reprType] = new _root_.shapeless.LabelledGeneric[$A] {
       type Repr = ${reprType}
 
       def to(struct: $A): Repr = {
@@ -213,27 +206,71 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       }
 
       def from(hlist: Repr): $A = hlist match {
-        case $hlist => $apply(..${params.map(p => p.name)})
+        case $hlistPattern => $apply(..${params.map(p => p.name)})
       }
     }"""
-    println(s"Made a LabelledGeneric: $r")
-    r
-  }
-
-  /**
-   * Like 'decodeThriftStruct', but using an alternate approach: don’t create
-   * the Decoder itself, instead create an implicit conversion to shapeless’
-   * 'LabelledGeneric', which circe can then handle using semi-automatic
-   * derivation.
-   */
-  def decodeThriftStructShapeless[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
-    val r = q"""implicit val decoder: Decoder[${weakTypeOf[A]}] = _root_.io.circe.generic.semiauto.deriveDecoder"""
+    val decoder = q"""_root_.io.circe.generic.semiauto.deriveDecoder"""
+    val r = q"""{
+                   ..$witnesses
+                   $labelledGeneric
+                   $decoder
+                }"""
     println(s"Making a decoder: $r")
     r
   }
 
   def encodeThriftStructShapeless[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
-    q"""implicit val encoder: Encoder[${weakTypeOf[A]}] = _root_.io.circe.generic.semiauto.deriveEncoder"""
+    val A = weakTypeOf[A]
+    val apply = getApplyMethod(A)
+    val params = apply.paramLists.head
+    val witnesses: List[c.Tree] = params.map(
+      param => {
+        val name = param.name
+        val witnessName = TermName(s"${name.toString()}Witness")
+        val symbolString = name.toString()
+        q"""val ${witnessName} = _root_.shapeless.Witness(_root_.scala.Symbol(${symbolString}))"""
+      }
+    )
+    val reprType: c.Tree = params.foldRight[c.Tree](tq"""_root_.shapeless.HNil""") { case (param, acc) =>
+      val witnessName = TermName(s"${param.name}Witness")
+      tq"""_root_.shapeless.::[_root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature}], $acc]"""
+    }
+    val hlist = params.foldRight[c.Tree](q"""_root_.shapeless.HNil""") { case (param, acc) =>
+      val paramName = TermName(s"${param.name.toString()}")
+      q"""_root_.shapeless.::(${paramName}, $acc)"""
+    }
+    // hlistPattern is identical to hlist but with the pq interpolator instead of q
+    val hlistPattern = params.foldRight[c.Tree](pq"""_root_.shapeless.HNil""") { case (param, acc) =>
+      val paramName = TermName(s"${param.name.toString()}")
+      pq"""_root_.shapeless.::(${paramName}, $acc)"""
+    }
+    val labelledFields = params.map(param => {
+      val paramName = TermName(param.name.toString())
+      val witnessName = TermName(s"${param.name.toString()}Witness")
+      q"""val ${paramName}: _root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature}] = _root_.shapeless.labelled.field(struct.${paramName})"""
+      }
+    )
+    val labelledGeneric = q"""
+    implicit def generic: LabelledGeneric.Aux[$A, $reprType] = new _root_.shapeless.LabelledGeneric[$A] {
+      type Repr = ${reprType}
+
+      def to(struct: $A): Repr = {
+        ..$labelledFields
+        $hlist
+      }
+
+      def from(hlist: Repr): $A = hlist match {
+        case $hlistPattern => $apply(..${params.map(p => p.name)})
+      }
+    }"""
+    val encoder = q"""_root_.io.circe.generic.semiauto.deriveEncoder"""
+    val r = q"""{
+                   ..$witnesses
+                   $labelledGeneric
+                   $encoder
+                }"""
+    println(s"Making an encoder: $r")
+    r
   }
 
   /**
