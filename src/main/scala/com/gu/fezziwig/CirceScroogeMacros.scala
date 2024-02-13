@@ -13,20 +13,13 @@ import shapeless.{Lazy, |¬|, LabelledGeneric}
 object CirceScroogeMacros {
   type NotUnion[T] = |¬|[ThriftUnion]#λ[T]  //For telling the compiler not to use certain macros for thrift Unions
 
-  trait Representation[A] {
-    type R
-  }
-
   /**
     * The macro bundle magic happens here.
     * Note - intellij doesn't like the references to methods in an uninstantiated class, but it does compile.
     */
 
   // implicit def decodeThriftStruct[A <: ThriftStruct : NotUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftStruct[A]
-  implicit def thriftStructRepr[A <: ThriftStruct : NotUnion]: Representation[A] = macro CirceScroogeMacrosImpl.thriftStructRepr[A]
-  implicit def thriftStructGeneric[A <: ThriftStruct : NotUnion](implicit
-    repr: Representation[A]
-  ): LabelledGeneric.Aux[A, repr.R] = macro CirceScroogeMacrosImpl.thriftStructGeneric[A, repr.R]
+  implicit def thriftStructGeneric[A <: ThriftStruct : NotUnion, R]: LabelledGeneric.Aux[A, R] = macro CirceScroogeMacrosImpl.thriftStructGeneric[A, R]
   implicit def decodeThriftStruct[A <: ThriftStruct : NotUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftStructShapeless[A]
   implicit def decodeThriftEnum[A <: ThriftEnum]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftEnum[A]
   implicit def decodeThriftUnion[A <: ThriftUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftUnion[A]
