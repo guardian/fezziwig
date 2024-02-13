@@ -18,48 +18,89 @@ import io.circe.generic.encoding.ReprAsObjectEncoder
 
 class FezziwigTests extends AnyFlatSpec with Matchers  {
 
-  val fooWitness = Witness(Symbol("foo"))
-  val innerWitness = Witness(Symbol("inner"))
+  implicit val outerEncoder: Encoder[OuterStruct] = {
+    val fooWitness = Witness(Symbol("foo"))
+    val innerWitness = Witness(Symbol("inner"))
 
-  type OuterRepr =
-    labelled.FieldType[fooWitness.T, String] :: labelled.FieldType[innerWitness.T, Option[InnerStruct]] :: HNil
+    implicit def outerGeneric: LabelledGeneric.Aux[OuterStruct, labelled.FieldType[fooWitness.T, String] :: labelled.FieldType[innerWitness.T, Option[InnerStruct]] :: HNil] = {
+      new LabelledGeneric[OuterStruct] {
+        type Repr = labelled.FieldType[fooWitness.T, String] :: labelled.FieldType[innerWitness.T, Option[InnerStruct]] :: HNil
 
-  implicit def outerGeneric: LabelledGeneric.Aux[OuterStruct, OuterRepr] = {
-    new LabelledGeneric[OuterStruct] {
-      type Repr = OuterRepr
-
-      def to(os: OuterStruct): Repr = {
-        val foo: labelled.FieldType[fooWitness.T,String] = labelled.field(os.foo)
-        val inner: labelled.FieldType[innerWitness.T, Option[InnerStruct]] = labelled.field(os.inner)
-        foo :: inner :: HNil
-      }
-      def from(hlist: Repr): OuterStruct = hlist match {
-        case foo :: inner :: HNil => OuterStruct(foo, inner)
-      }
-    }
-  }
-
-  val outerWitness = Witness(Symbol("outer"))
-  type InnerRepr = labelled.FieldType[outerWitness.T, Option[OuterStruct]] :: HNil
-
-  implicit def innerGeneric: LabelledGeneric.Aux[InnerStruct, InnerRepr] = {
-    new LabelledGeneric[InnerStruct] {
-      type Repr = InnerRepr
-
-      def to(is: InnerStruct): Repr = {
-        val outer: labelled.FieldType[outerWitness.T, Option[OuterStruct]] = labelled.field(is.outer)
-        outer :: HNil
-      }
-      def from(hlist: Repr): InnerStruct = hlist match {
-        case outer :: HNil => InnerStruct(outer)
+        def to(os: OuterStruct): Repr = {
+          val foo: labelled.FieldType[fooWitness.T,String] = labelled.field(os.foo)
+          val inner: labelled.FieldType[innerWitness.T, Option[InnerStruct]] = labelled.field(os.inner)
+          foo :: inner :: HNil
+        }
+        def from(hlist: Repr): OuterStruct = hlist match {
+          case foo :: inner :: HNil => OuterStruct(foo, inner)
+        }
       }
     }
+
+    deriveEncoder
   }
 
-  implicit val outerEncoder: Encoder[OuterStruct] = deriveEncoder
-  implicit val innerEncoder: Encoder[InnerStruct] = deriveEncoder
-  implicit val outerDecoder: Decoder[OuterStruct] = deriveDecoder
-  implicit val innerDecoder: Decoder[InnerStruct] = deriveDecoder
+  implicit val innerEncoder: Encoder[InnerStruct] = {
+    val outerWitness = Witness(Symbol("outer"))
+    type InnerRepr = labelled.FieldType[outerWitness.T, Option[OuterStruct]] :: HNil
+
+    implicit def innerGeneric: LabelledGeneric.Aux[InnerStruct, InnerRepr] = {
+      new LabelledGeneric[InnerStruct] {
+        type Repr = InnerRepr
+
+        def to(is: InnerStruct): Repr = {
+          val outer: labelled.FieldType[outerWitness.T, Option[OuterStruct]] = labelled.field(is.outer)
+          outer :: HNil
+        }
+        def from(hlist: Repr): InnerStruct = hlist match {
+          case outer :: HNil => InnerStruct(outer)
+        }
+      }
+    }
+
+    deriveEncoder
+  }
+  implicit val outerDecoder: Decoder[OuterStruct] = {
+    val fooWitness = Witness(Symbol("foo"))
+    val innerWitness = Witness(Symbol("inner"))
+
+    implicit def outerGeneric: LabelledGeneric.Aux[OuterStruct, labelled.FieldType[fooWitness.T, String] :: labelled.FieldType[innerWitness.T, Option[InnerStruct]] :: HNil] = {
+      new LabelledGeneric[OuterStruct] {
+        type Repr = labelled.FieldType[fooWitness.T, String] :: labelled.FieldType[innerWitness.T, Option[InnerStruct]] :: HNil
+
+        def to(os: OuterStruct): Repr = {
+          val foo: labelled.FieldType[fooWitness.T,String] = labelled.field(os.foo)
+          val inner: labelled.FieldType[innerWitness.T, Option[InnerStruct]] = labelled.field(os.inner)
+          foo :: inner :: HNil
+        }
+        def from(hlist: Repr): OuterStruct = hlist match {
+          case foo :: inner :: HNil => OuterStruct(foo, inner)
+        }
+      }
+    }
+
+    deriveDecoder
+  }
+  implicit val innerDecoder: Decoder[InnerStruct] = {
+    val outerWitness = Witness(Symbol("outer"))
+    type InnerRepr = labelled.FieldType[outerWitness.T, Option[OuterStruct]] :: HNil
+
+    implicit def innerGeneric: LabelledGeneric.Aux[InnerStruct, InnerRepr] = {
+      new LabelledGeneric[InnerStruct] {
+        type Repr = InnerRepr
+
+        def to(is: InnerStruct): Repr = {
+          val outer: labelled.FieldType[outerWitness.T, Option[OuterStruct]] = labelled.field(is.outer)
+          outer :: HNil
+        }
+        def from(hlist: Repr): InnerStruct = hlist match {
+          case outer :: HNil => InnerStruct(outer)
+        }
+      }
+    }
+
+    deriveDecoder
+  }
 
   it should "round-trip scrooge thrift models [outer]" in {
     val jsonString =
