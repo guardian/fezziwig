@@ -169,6 +169,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     val A = weakTypeOf[A]
     val apply = getApplyMethod(A)
     val params = apply.paramLists.head
+    val fieldNames: List[c.Tree] = params.map(p =>q"""${TermName(p.name.toString())}""")
     val witnesses: List[c.Tree] = params.map(
       param => {
         val name = param.name
@@ -187,7 +188,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     }
     // hlistPattern is identical to hlist but with the pq interpolator instead of q
     val hlistPattern = params.foldRight[c.Tree](pq"""_root_.shapeless.HNil""") { case (param, acc) =>
-      val paramName = TermName(s"${param.name.toString()}")
+      val paramName = TermName(param.name.toString())
       pq"""_root_.shapeless.::(${paramName}, $acc)"""
     }
     val labelledFields = params.map(param => {
@@ -206,13 +207,15 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       }
 
       def from(hlist: Repr): $A = hlist match {
-        case $hlistPattern => $apply(..${params.map(p => p.name)})
+        case $hlistPattern => $apply(..${fieldNames})
       }
     }"""
     val decoder = q"""_root_.io.circe.generic.semiauto.deriveDecoder"""
     val r = q"""{
                    ..$witnesses
+
                    $labelledGeneric
+
                    $decoder
                 }"""
     println(s"Making a decoder: $r")

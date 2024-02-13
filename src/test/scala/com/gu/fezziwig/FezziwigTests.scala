@@ -120,6 +120,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
     val jsonBefore: Json = parse(jsonString).toOption.get
 
     val decoded: OuterStruct = jsonBefore.as[OuterStruct].toOption.get
+    println(s"Decoded is $decoded")
 
     val jsonAfter: Json = decoded.asJson
 
