@@ -5,6 +5,11 @@ import scala.reflect.macros.blackbox
 import com.twitter.scrooge.{ThriftEnum, ThriftStruct, ThriftUnion}
 import io.circe.{Decoder, Encoder}
 import shapeless.{Lazy, |¬|, LabelledGeneric}
+import shapeless.HList
+
+trait Representation[A] {
+  type R
+}
 
 /**
   * Macros for Circe encoding/decoding of various Scrooge-generated classes.
@@ -18,13 +23,14 @@ object CirceScroogeMacros {
     * Note - intellij doesn't like the references to methods in an uninstantiated class, but it does compile.
     */
 
-  // implicit def decodeThriftStruct[A <: ThriftStruct : NotUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftStruct[A]
-  implicit def thriftStructGeneric[A <: ThriftStruct : NotUnion, R]: LabelledGeneric.Aux[A, R] = macro CirceScroogeMacrosImpl.thriftStructGeneric[A, R]
+  implicit def thriftStructRepr[A <: ThriftStruct : NotUnion]: Representation[A] = macro CirceScroogeMacrosImpl.thriftStructRepr[A]
+
+  implicit def thriftStructGeneric[A <: ThriftStruct : NotUnion, R <: HList]: LabelledGeneric.Aux[A, R] = macro CirceScroogeMacrosImpl.thriftStructGeneric[A, R]
+
   implicit def decodeThriftStruct[A <: ThriftStruct : NotUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftStructShapeless[A]
   implicit def decodeThriftEnum[A <: ThriftEnum]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftEnum[A]
   implicit def decodeThriftUnion[A <: ThriftUnion]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftUnion[A]
 
-  // implicit def encodeThriftStruct[A <: ThriftStruct : NotUnion]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftStruct[A]
   implicit def encodeThriftStruct[A <: ThriftStruct : NotUnion]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftStructShapeless[A]
   implicit def encodeThriftEnum[A <: ThriftEnum]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftEnum[A]
   implicit def encodeThriftUnion[A <: ThriftUnion]: Encoder[A] = macro CirceScroogeMacrosImpl.encodeThriftUnion[A]
@@ -165,56 +171,12 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       val witnessName = TermName(s"${param.name}Witness")
       q"""_root_.shapeless.::[_root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature}], $acc]"""
     }
-    q"""new _root_.com.gu.fezziwig.CirceScroogeMacros.Representation {
+    q"""new _root_.com.gu.fezziwig.Representation {
       type R = ${reprType}
      }"""
   }
 
   def thriftStructGeneric[A: c.WeakTypeTag, R: c.WeakTypeTag](x: c.Tree): c.Tree = {
-    val A = weakTypeOf[A]
-    val R = weakTypeOf[R]
-    val apply = getApplyMethod(A)
-    val params = apply.paramLists.head
-    val witnesses: List[c.Tree] = params.map(
-      param => {
-        val name = param.name
-        val witnessName = TermName(s"${name.toString()}Witness")
-        val symbolString = name.toString()
-        q"""val ${witnessName} = _root_.shapeless.Witness(_root_.scala.Symbol(${symbolString}))"""
-      }
-    )
-    val hlist = params.foldRight[c.Tree](q"""_root.shapeless.HNil""") { case (param, acc) =>
-      val paramName = TermName(s"${param.name.toString()}")
-      q"""_root_.shapeless.::(${paramName}, $acc)"""
-    }
-    val labelledFields = params.map(param => {
-      val paramName = TermName(param.name.toString())
-      val witnessName = TermName(s"${param.name.toString()}Witness")
-      q"""val ${paramName}: _root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature}] = _root_.shapeless.labelled.field(struct.${paramName})"""
-      }
-    )
-    q"""
-    new _root_.shapeless.LabelledGeneric[$A] {
-      type Repr = $R
-
-      def to(struct: $A): Repr = {
-        ..$labelledFields
-        $hlist
-      }
-
-      def from(hlist: Repr): $A = hlist match {
-        case $hlist => $apply(..${params.map(p => p.name)})
-      }
-    }"""
-  }
-
-  /**
-   * Like 'decodeThriftStruct', but using an alternate approach: don’t create
-   * the Decoder itself, instead create an implicit conversion to shapeless’
-   * 'LabelledGeneric', which circe can then handle using semi-automatic
-   * derivation.
-   */
-  def decodeThriftStructShapeless[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
     val A = weakTypeOf[A]
     val apply = getApplyMethod(A)
     val params = apply.paramLists.head
@@ -230,10 +192,44 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       val witnessName = TermName(s"${param.name}Witness")
       q"""_root_.shapeless.::[_root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature}], $acc]"""
     }
-    val reprTypeName = TypeName(s"${A.toString()}Repr")
-    val reprTypeSynonym = q"""type ${reprTypeName} = ${reprType}"""
-    val encoder = q"""implicit val encoder: Encoder[$A] = _root_.io.circe.generic.semiauto.deriveEncoder"""
-    q"""implicit val decoder: Decoder[$A] = _root_.io.circe.generic.semiauto.deriveDecoder"""
+    val hlist = params.foldRight[c.Tree](q"""_root.shapeless.HNil""") { case (param, acc) =>
+      val paramName = TermName(s"${param.name.toString()}")
+      q"""_root_.shapeless.::(${paramName}, $acc)"""
+    }
+    val labelledFields = params.map(param => {
+      val paramName = TermName(param.name.toString())
+      val witnessName = TermName(s"${param.name.toString()}Witness")
+      q"""val ${paramName}: _root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature}] = _root_.shapeless.labelled.field(struct.${paramName})"""
+      }
+    )
+    val r = q"""
+    ..$witnesses
+    new _root_.shapeless.LabelledGeneric[$A] {
+      type Repr = ${reprType}
+
+      def to(struct: $A): Repr = {
+        ..$labelledFields
+        $hlist
+      }
+
+      def from(hlist: Repr): $A = hlist match {
+        case $hlist => $apply(..${params.map(p => p.name)})
+      }
+    }"""
+    println(s"Made a LabelledGeneric: $r")
+    r
+  }
+
+  /**
+   * Like 'decodeThriftStruct', but using an alternate approach: don’t create
+   * the Decoder itself, instead create an implicit conversion to shapeless’
+   * 'LabelledGeneric', which circe can then handle using semi-automatic
+   * derivation.
+   */
+  def decodeThriftStructShapeless[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
+    val r = q"""implicit val decoder: Decoder[${weakTypeOf[A]}] = _root_.io.circe.generic.semiauto.deriveDecoder"""
+    println(s"Making a decoder: $r")
+    r
   }
 
   def encodeThriftStructShapeless[A: c.WeakTypeTag](x: c.Tree): c.Tree = {
