@@ -21,7 +21,8 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |  "b": {
         |    "u": {
         |      "c": {
-        |        "s": "test"
+        |        "s": "test",
+        |        "x": []
         |      }
         |    }
         |  },
@@ -33,21 +34,23 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |  },
         |  "x": {
         |    "s": "First C",
-        |    "x": {
+        |    "x": [{
         |      "b": {
         |        "u": {
         |          "c": {
-        |            "s": "test"
+        |            "s": "test",
+        |            "x": []
         |          }
         |        }
         |      },
-        |       "bar": 25,
-        |       "e": "ENUM_A",
-        |       "intMap": { "k": [2] },
-        |       "x": {
-        |         "s": "Nested C"
-      |         }
-        |    }
+        |      "bar": 25,
+        |      "e": "ENUM_A",
+        |      "intMap": { "k": [2] },
+        |      "x": {
+        |        "s": "Nested C",
+        |        "x": []
+        |      }
+        |    }]
         |  }
         |}
       """.stripMargin

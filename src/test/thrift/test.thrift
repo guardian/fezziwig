@@ -2,7 +2,6 @@ namespace scala com.gu.fezziwig
 
 struct StructC {
   1: required string s
-  /*2: optional StructA x*/
   2: required list<StructA> x
 }
 

@@ -16,10 +16,13 @@ object CirceScroogeMacros {
     * Note - intellij doesn't like the references to methods in an uninstantiated class, but it does compile.
     */
 
+  implicit def decodeGenericSeq[A](d: Decoder[A]): Decoder[collection.Seq[A]] = Decoder.decodeIterable(d, scala.collection.Seq.iterableFactory)
   implicit def decodeOption[A](d: Decoder[A]): Decoder[Option[A]] = Decoder.decodeOption(d)
   implicit def decodeSeq[A](decodeA: Decoder[A]): Decoder[Seq[A]] = Decoder.decodeSeq(decodeA)
   implicit def decodeSet[A](decodeA: Decoder[A]): Decoder[Set[A]] = Decoder.decodeSet(decodeA)
   implicit def decodeList[A](decodeA: Decoder[A]): Decoder[List[A]] = Decoder.decodeList(decodeA)
+
+  implicit def encodeIterable[A](e: Encoder[A]): Encoder[collection.Seq[A]] = Encoder.encodeIterable(e, implicitly[collection.Seq[A] => Iterable[A]])
 
   implicit def decodeThriftStructOrUnion[A <: ThriftStruct]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftStruct[A]
   implicit def decodeThriftEnum[A <: ThriftEnum]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftEnum[A]
@@ -145,14 +148,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     TermName(c.freshName(tpe.toString))
   }
 
-  private def nameFromTypeOption(tpe: Type) =
-    TermName(c.freshName("option" + tpe.toString))
-
-  private def isOption(tpe: Type) =
-    tpe.typeSymbol.fullName == "scala.Option"
-
   def createThriftStructDecoder(A: Type, decodeMe: c.universe.TermName): DecoderDefinition = {
-    println(s"Creating decoder for $A")
     decoderCache(A) = DecoderDefinition(decodeMe, q"???")
 
     val apply = getApplyMethod(A)
@@ -432,12 +428,10 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
             appliedType(weakTypeOf[Decoder[_]].typeConstructor, interestingType), // e.g.   Decoder[com.gu.fezziwig.StructA]
             appliedType(weakTypeOf[Decoder[_]].typeConstructor, tpe) // e.g. Decoder[scala.collection.Seq[com.gu.fezziwig.StructA]]
           )
-        println(s"Looking for $funTpe")
         Some(c.inferImplicitValue(funTpe)).filter(_.nonEmpty).map(fn => (interestingType, Some(fn))).getOrElse((tpe, None))
       case _ =>
         (tpe, None)
     }
-    println(s"$interestingType - $wrapper")
     
     val decoderName: c.universe.TermName = nameFromType(interestingType)
 
@@ -484,31 +478,50 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
 
   private def getImplicitEncoder(tpe: Type): c.TermName = {
 
-    val encoderName: c.universe.TermName = nameFromType(tpe)
+    val (interestingType, wrapper) = tpe.typeArgs match {
+      case interestingType :: Nil =>
+        val funTpe = appliedType(
+          weakTypeOf[Function1[_, _]].typeConstructor,
+          appliedType(weakTypeOf[Encoder[_]].typeConstructor, interestingType), // e.g.   Decoder[com.gu.fezziwig.StructA]
+          appliedType(weakTypeOf[Encoder[_]].typeConstructor, tpe) // e.g. Decoder[scala.collection.Seq[com.gu.fezziwig.StructA]]
+        )
+        Some(c.inferImplicitValue(funTpe)).filter(_.nonEmpty).map(fn => (interestingType, Some(fn))).getOrElse((tpe, None))
+      case _ =>
+        (tpe, None)
+    }
 
-    val cachedValue = encoderCache.getOrElse(tpe, {
-      if (tpe <:< weakTypeOf[ThriftStruct]) {
-        if (tpe <:< weakTypeOf[ThriftUnion])
-          createThriftUnionEncoder(tpe, encoderName)
+    val encoderName: c.universe.TermName = nameFromType(interestingType)
+
+    val cachedValue = encoderCache.getOrElse(interestingType, {
+      if (interestingType <:< weakTypeOf[ThriftStruct]) {
+        if (interestingType <:< weakTypeOf[ThriftUnion])
+          createThriftUnionEncoder(interestingType, encoderName)
         else
-          createThriftStructEncoder(tpe, encoderName)
+          createThriftStructEncoder(interestingType, encoderName)
       } else {
-        val encoderForType = appliedType(weakTypeOf[Encoder[_]].typeConstructor, tpe)
+        val encoderForType = appliedType(weakTypeOf[Encoder[_]].typeConstructor, interestingType)
         val normalImplicitEncoder = c.inferImplicitValue(encoderForType)
         val implementation = if (normalImplicitEncoder.nonEmpty) {
           normalImplicitEncoder
         } else {
           val lazyEncoderForType = appliedType(weakTypeOf[Lazy[_]].typeConstructor, encoderForType)
           val implicitLazyEncoder = c.inferImplicitValue(lazyEncoderForType)
-          if (implicitLazyEncoder.isEmpty) c.abort(c.enclosingPosition, s"Could not find an implicit Encoder[$tpe] even after resorting to Lazy")
+          if (implicitLazyEncoder.isEmpty) c.abort(c.enclosingPosition, s"Could not find an implicit Encoder[$interestingType] even after resorting to Lazy")
 
-          q"_root_.scala.Predef.implicitly[_root_.shapeless.Lazy[_root_.io.circe.Encoder[$tpe]]].value"
+          q"_root_.scala.Predef.implicitly[_root_.shapeless.Lazy[_root_.io.circe.Encoder[$interestingType]]].value"
         }
         val definition = EncoderDefinition(encoderName, implementation)
-        encoderCache(tpe) = definition
+        encoderCache(interestingType) = definition
         definition
       }
     })
-    cachedValue.name
+    wrapper match {
+      case Some(w) =>
+        val name = nameFromType(tpe)
+        val definition = EncoderDefinition(name, q"($w)(${cachedValue.name})")
+        encoderCache.addOne(tpe, definition)
+        name
+      case None => cachedValue.name
+    }
   }
 }
