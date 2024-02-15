@@ -470,8 +470,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       case Some(w) =>
         val name = nameFromType(tpe)
         val definition = DecoderDefinition(name, q"($w)(${cachedValue.name})")
-        decoderCache.addOne(tpe, definition)
-        name
+        decoderCache.getOrElseUpdate(tpe, definition).name
       case None => cachedValue.name
     }
   }
@@ -519,8 +518,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       case Some(w) =>
         val name = nameFromType(tpe)
         val definition = EncoderDefinition(name, q"($w)(${cachedValue.name})")
-        encoderCache.addOne(tpe, definition)
-        name
+        encoderCache.getOrElseUpdate(tpe, definition).name
       case None => cachedValue.name
     }
   }

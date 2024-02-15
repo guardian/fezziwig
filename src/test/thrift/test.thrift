@@ -30,6 +30,7 @@ struct StructA {
   4: required Enum e
   5: required map<string, list<i32>> intMap
   7: optional StructC x
+  8: optional string secondOptionalString
 }
 
 struct RecursiveStruct {
