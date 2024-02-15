@@ -16,6 +16,11 @@ object CirceScroogeMacros {
     * Note - intellij doesn't like the references to methods in an uninstantiated class, but it does compile.
     */
 
+  implicit def decodeOption[A](d: Decoder[A]): Decoder[Option[A]] = Decoder.decodeOption(d)
+  implicit def decodeSeq[A](decodeA: Decoder[A]): Decoder[Seq[A]] = Decoder.decodeSeq(decodeA)
+  implicit def decodeSet[A](decodeA: Decoder[A]): Decoder[Set[A]] = Decoder.decodeSet(decodeA)
+  implicit def decodeList[A](decodeA: Decoder[A]): Decoder[List[A]] = Decoder.decodeList(decodeA)
+
   implicit def decodeThriftStructOrUnion[A <: ThriftStruct]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftStruct[A]
   implicit def decodeThriftEnum[A <: ThriftEnum]: Decoder[A] = macro CirceScroogeMacrosImpl.decodeThriftEnum[A]
 
@@ -26,7 +31,7 @@ object CirceScroogeMacros {
 private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
   import c.universe._
 
-  case class DecoderDefinition(name: c.universe.TermName, optionName: c.universe.TermName, implementation: c.universe.Tree)
+  case class DecoderDefinition(name: c.universe.TermName, implementation: c.universe.Tree)
 
   case class EncoderDefinition(name: c.universe.TermName, implementation: c.universe.Tree)
 
@@ -80,13 +85,12 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     val A = weakTypeOf[A]
     val decoderName = nameFromType(A)
     if (A <:< weakTypeOf[ThriftUnion])
-      createThriftUnionDecoder(A, decoderName, nameFromTypeOption(A))
+      createThriftUnionDecoder(A, decoderName)
     else
-      createThriftStructDecoder(A, decoderName, nameFromTypeOption(A))
+      createThriftStructDecoder(A, decoderName)
     val dependencies = decoderCache.flatMap({ case (tpe, cacheEntry) =>
       List(
-        q"""def ${cacheEntry.name}: Decoder[${tpe}] = ${cacheEntry.implementation}""",
-        q"""def ${cacheEntry.optionName}: Decoder[Option[${tpe}]] = ${optionWrapped(tpe, cacheEntry.name)}"""
+        q"""def ${cacheEntry.name}: Decoder[${tpe}] = ${cacheEntry.implementation}"""
       )
     })
     q"""
@@ -147,8 +151,9 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
   private def isOption(tpe: Type) =
     tpe.typeSymbol.fullName == "scala.Option"
 
-  def createThriftStructDecoder(A: Type, decodeMe: c.universe.TermName, decodeOptionMe: c.universe.TermName): DecoderDefinition = {
-    decoderCache(A) = DecoderDefinition(decodeMe, decodeOptionMe, q"???")
+  def createThriftStructDecoder(A: Type, decodeMe: c.universe.TermName): DecoderDefinition = {
+    println(s"Creating decoder for $A")
+    decoderCache(A) = DecoderDefinition(decodeMe, q"???")
 
     val apply = getApplyMethod(A)
 
@@ -235,7 +240,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       }
     }"""
 
-    val entry = DecoderDefinition(decodeMe, decodeOptionMe, implementation)
+    val entry = DecoderDefinition(decodeMe, implementation)
     decoderCache(A) = entry
     entry
   }
@@ -257,8 +262,8 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
     """
   }
 
-  def createThriftUnionDecoder(A: Type, decodeMe: c.universe.TermName, decodeOptionMe: c.universe.TermName): DecoderDefinition = {
-    decoderCache(A) = DecoderDefinition(decodeMe, decodeOptionMe, q"???")
+  def createThriftUnionDecoder(A: Type, decodeMe: c.universe.TermName): DecoderDefinition = {
+    decoderCache(A) = DecoderDefinition(decodeMe, q"???")
     val memberClasses: Iterable[Symbol] = getUnionMemberClasses(A)
 
     val decoderCases: (List[Tree],List[Tree]) = memberClasses.toList.foldLeft(List[Tree](), List[Tree]()) { (acc, memberClass) =>
@@ -305,7 +310,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
       }
     }"""
 
-    val entry = DecoderDefinition(decodeMe, decodeOptionMe, implementation)
+    val entry = DecoderDefinition(decodeMe, implementation)
     decoderCache(A) = entry
     entry
   }
@@ -420,17 +425,28 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
   }
 
   private def getImplicitDecoder(tpe: Type): c.TermName = {
-
-    val interestingType = if (isOption(tpe)) tpe.typeArgs.head else tpe
+    val (interestingType, wrapper) = tpe.typeArgs match {
+      case interestingType :: Nil =>
+        val funTpe = appliedType(
+          weakTypeOf[Function1[_, _]].typeConstructor,
+            appliedType(weakTypeOf[Decoder[_]].typeConstructor, interestingType), // e.g.   Decoder[com.gu.fezziwig.StructA]
+            appliedType(weakTypeOf[Decoder[_]].typeConstructor, tpe) // e.g. Decoder[scala.collection.Seq[com.gu.fezziwig.StructA]]
+          )
+        println(s"Looking for $funTpe")
+        Some(c.inferImplicitValue(funTpe)).filter(_.nonEmpty).map(fn => (interestingType, Some(fn))).getOrElse((tpe, None))
+      case _ =>
+        (tpe, None)
+    }
+    println(s"$interestingType - $wrapper")
+    
     val decoderName: c.universe.TermName = nameFromType(interestingType)
-    val optionDecoderName = nameFromTypeOption(interestingType)
 
     val cachedValue = decoderCache.getOrElse(interestingType, {
       if (interestingType <:< weakTypeOf[ThriftStruct]) {
         if (interestingType <:< weakTypeOf[ThriftUnion])
-          createThriftUnionDecoder(interestingType, decoderName, optionDecoderName)
+          createThriftUnionDecoder(interestingType, decoderName)
         else
-          createThriftStructDecoder(interestingType, decoderName, optionDecoderName)
+          createThriftStructDecoder(interestingType, decoderName)
       } else {
         val decoderForType = appliedType(weakTypeOf[Decoder[_]].typeConstructor, interestingType)
 
@@ -451,16 +467,19 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
           q"_root_.scala.Predef.implicitly[_root_.shapeless.Lazy[_root_.io.circe.Decoder[$interestingType]]].value"
         }
 
-        val definition = DecoderDefinition(decoderName, optionDecoderName, implementation)
+        val definition = DecoderDefinition(decoderName, implementation)
         decoderCache(interestingType) = definition
         definition
       }
     })
-    if (isOption(tpe))
-      cachedValue.optionName
-    else
-      cachedValue.name
-
+    wrapper match {
+      case Some(w) =>
+        val name = nameFromType(tpe)
+        val definition = DecoderDefinition(name, q"($w)(${cachedValue.name})")
+        decoderCache.addOne(tpe, definition)
+        name
+      case None => cachedValue.name
+    }
   }
 
   private def getImplicitEncoder(tpe: Type): c.TermName = {
