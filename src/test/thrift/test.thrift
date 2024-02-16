@@ -75,3 +75,15 @@ struct CoRec2 {
 struct VectorTest {
   1: list<RecList> lister;
 }
+
+struct BlockElement {
+  1: optional ListElementFields listTypeData;
+}
+
+struct ListElementFields {
+  1: required list<ListItem> items;
+}
+
+struct ListItem {
+  1: required list<BlockElement> elements = [];
+}

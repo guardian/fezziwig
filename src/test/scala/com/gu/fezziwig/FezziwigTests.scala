@@ -54,6 +54,15 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
   implicit val vectorTestDecoder: Decoder[VectorTest] = deriveDecoder
   implicit val vectorTestEncoder: Encoder[VectorTest] = deriveEncoder
 
+  implicit val blockElementDecoder: Decoder[BlockElement] = deriveDecoder
+  implicit val blockElementEncoder: Encoder[BlockElement] = deriveEncoder
+
+  implicit val listElementFieldsDecoder: Decoder[ListElementFields] = deriveDecoder
+  implicit val listElementFieldsEncoder: Encoder[ListElementFields] = deriveEncoder
+
+  implicit val listItemDecoder: Decoder[ListItem] = deriveDecoder
+  implicit val listItemEncoder: Encoder[ListItem] = deriveEncoder
+
   implicit val decodeDefaultTestStruct: Decoder[DefaultTestStruct] = deriveDecoder
 
   private def testRoundTrip[T](jsonString: String)(implicit decoder: Decoder[T], encoder: Encoder[T]) = {
@@ -144,7 +153,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |""".stripMargin)
   }
 
-  it should "round-trip scrooge thrift models [outer]" in {
+  it should "round-trip scrooge recursive thrift models of the form A->Option[A]->Option[B]" in {
     testRoundTrip[OuterStruct](
       """
         |{
@@ -154,6 +163,38 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |      "foo" : "oh",
         |      "inner" : null
         |    }
+        |  }
+        |}
+      """.stripMargin)
+  }
+
+  it should "round-trip scrooge recursive thrift models of the form A->Option[B]->List[C]->List[A]" in {
+    testRoundTrip[BlockElement](
+      """
+        |{
+        |  "listTypeData" : {
+        |    "items" : [
+        |      {
+        |        "elements": [
+        |          {
+        |            "listTypeData": null
+        |          },
+        |          {
+        |            "listTypeData": null
+        |          }
+        |        ]
+        |      },
+        |      {
+        |        "elements": [
+        |          {
+        |            "listTypeData": null
+        |          },
+        |          {
+        |            "listTypeData": null
+        |          }
+        |        ]
+        |      }
+        |    ]
         |  }
         |}
       """.stripMargin)
