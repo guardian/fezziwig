@@ -87,3 +87,7 @@ struct ListElementFields {
 struct ListItem {
   1: required list<BlockElement> elements = [];
 }
+
+struct StructWithOptional {
+  1: optional string s;
+}
