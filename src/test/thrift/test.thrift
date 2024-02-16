@@ -89,5 +89,5 @@ struct ListItem {
 }
 
 struct StructWithOptional {
-  1: optional string s;
+  1: optional string optionalField;
 }
