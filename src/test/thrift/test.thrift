@@ -53,3 +53,25 @@ struct InnerStruct {
 struct WithDefault {
     1: optional i32 something = 42
 }
+
+struct RecTree {
+  1: list<RecTree> children
+  2: i16 item
+}
+
+struct RecList {
+  1: optional RecList nextitem
+  3: i16 item
+}
+
+struct CoRec {
+  1: CoRec2 other
+}
+
+struct CoRec2 {
+  1: optional CoRec other
+}
+
+struct VectorTest {
+  1: list<RecList> lister;
+}

@@ -39,6 +39,21 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
   implicit val structADecoder: Decoder[StructA] = deriveDecoder
   implicit val structAEncoder: Encoder[StructA] = deriveEncoder
 
+  implicit val recTreeDecoder: Decoder[RecTree] = deriveDecoder
+  implicit val recTreeEncoder: Encoder[RecTree] = deriveEncoder
+
+  implicit val recListDecoder: Decoder[RecList] = deriveDecoder
+  implicit val recListEncoder: Encoder[RecList] = deriveEncoder
+
+  implicit val coRecDecoder: Decoder[CoRec] = deriveDecoder
+  implicit val coRecEncoder: Encoder[CoRec] = deriveEncoder
+
+  implicit val coRec2Decoder: Decoder[CoRec2] = deriveDecoder
+  implicit val coRec2Encoder: Encoder[CoRec2] = deriveEncoder
+
+  implicit val vectorTestDecoder: Decoder[VectorTest] = deriveDecoder
+  implicit val vectorTestEncoder: Encoder[VectorTest] = deriveEncoder
+
   implicit val decodeDefaultTestStruct: Decoder[DefaultTestStruct] = deriveDecoder
 
   private def testRoundTrip[T](jsonString: String)(implicit decoder: Decoder[T], encoder: Encoder[T]) = {
@@ -49,6 +64,85 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
     diffJ should be(JsonPatch(Nil))
   }
 
+  it should "round-trip recursive tree" in {
+    testRoundTrip[RecTree](
+      """
+        |{
+        |  "children": [
+        |    { "item": 5, "children": [] },
+        |    { "item": 4, "children": [] },
+        |    { "item": 3, "children": [ { "item": 2, "children": [] } ] }
+        |  ],
+        |  "item": 1
+        |}
+        |""".stripMargin)
+  }
+
+  it should "round-trip recursive list" in {
+    testRoundTrip[RecList](
+      """
+        |{
+        |  "item": 1,
+        |  "nextitem": {
+        |    "item": 2,
+        |    "nextitem": {
+        |      "item": 3,
+        |      "nextitem": null
+        |    }
+        |  }
+        |}
+        |""".stripMargin)
+  }
+
+  it should "round-trip co-recursive struct" in {
+    testRoundTrip[CoRec](
+      """
+        |{
+        |  "other": {
+        |    "other": {
+        |      "other": {
+        |        "other": {
+        |          "other": {
+        |            "other": null
+        |          }
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+        |""".stripMargin)
+  }
+
+  it should "round-trip recursive vector" in {
+    testRoundTrip[VectorTest](
+      """
+        |{
+        |  "lister": [
+        |    {
+        |      "item": 1,
+        |      "nextitem": {
+        |        "item": 2,
+        |        "nextitem": null
+        |      }
+        |    },
+        |    {
+        |      "item": 3,
+        |      "nextitem": {
+        |        "item": 4,
+        |        "nextitem": null
+        |      }
+        |    },
+        |    {
+        |      "item": 5,
+        |      "nextitem": {
+        |        "item": 6,
+        |        "nextitem": null
+        |      }
+        |    }
+        |  ]
+        |}
+        |""".stripMargin)
+  }
 
   it should "round-trip scrooge thrift models [outer]" in {
     testRoundTrip[OuterStruct](
