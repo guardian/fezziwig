@@ -14,6 +14,7 @@ import io.circe.generic.semiauto._
 import io.circe.parser._
 import io.circe.syntax._
 import org.apache.thrift.protocol._
+import org.scalatest.OptionValues.convertOptionToValuable
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import shapeless._
@@ -68,7 +69,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
   private def testRoundTrip[T](jsonString: String)(implicit decoder: Decoder[T], encoder: Encoder[T]) = {
     val jsonBefore: Json = parse(jsonString).toOption.get
     val decoded: T = jsonBefore.as[T].toOption.get
-    val jsonAfter: Json = decoded.asJson
+    val jsonAfter: Json = decoded.asJson.deepDropNullValues
     val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
     diffJ should be(JsonPatch(Nil))
   }
@@ -95,8 +96,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |  "nextitem": {
         |    "item": 2,
         |    "nextitem": {
-        |      "item": 3,
-        |      "nextitem": null
+        |      "item": 3
         |    }
         |  }
         |}
@@ -112,7 +112,6 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |      "other": {
         |        "other": {
         |          "other": {
-        |            "other": null
         |          }
         |        }
         |      }
@@ -130,22 +129,19 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |    {
         |      "item": 1,
         |      "nextitem": {
-        |        "item": 2,
-        |        "nextitem": null
+        |        "item": 2
         |      }
         |    },
         |    {
         |      "item": 3,
         |      "nextitem": {
-        |        "item": 4,
-        |        "nextitem": null
+        |        "item": 4
         |      }
         |    },
         |    {
         |      "item": 5,
         |      "nextitem": {
-        |        "item": 6,
-        |        "nextitem": null
+        |        "item": 6
         |      }
         |    }
         |  ]
@@ -160,8 +156,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |  "foo" : "hello",
         |  "inner" : {
         |    "outer" : {
-        |      "foo" : "oh",
-        |      "inner" : null
+        |      "foo" : "oh"
         |    }
         |  }
         |}
@@ -176,22 +171,14 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |    "items" : [
         |      {
         |        "elements": [
-        |          {
-        |            "listTypeData": null
-        |          },
-        |          {
-        |            "listTypeData": null
-        |          }
+        |          {},
+        |          {}
         |        ]
         |      },
         |      {
         |        "elements": [
-        |          {
-        |            "listTypeData": null
-        |          },
-        |          {
-        |            "listTypeData": null
-        |          }
+        |          {},
+        |          {}
         |        ]
         |      }
         |    ]
@@ -237,10 +224,10 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
       """.stripMargin)
   }
 
-  it should "round-trip optional fields as missing rather than json null" in {
-    implicit val structWithOptionalDecoder: Decoder[StructWithOptional] = deriveDecoder
+  it should "follow circe default behavior of serialising optional fields as nulls rather than missing" in {
     implicit val structWithOptionalEncoder: Encoder[StructWithOptional] = deriveEncoder
-    testRoundTrip[StructWithOptional]("{}")
+    val jsonAfter: Json = StructWithOptional().asJson
+    jsonAfter.asObject.flatMap(_("optionalField")).value.isNull should be(true)
   }
 
   it should "accumulate errors" in {
