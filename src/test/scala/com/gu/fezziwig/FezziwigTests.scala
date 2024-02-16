@@ -41,8 +41,17 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
   implicit val decodeDefaultTestStruct: Decoder[DefaultTestStruct] = deriveDecoder
 
+  private def testRoundTrip[T](jsonString: String)(implicit decoder: Decoder[T], encoder: Encoder[T]) = {
+    val jsonBefore: Json = parse(jsonString).toOption.get
+    val decoded: T = jsonBefore.as[T].toOption.get
+    val jsonAfter: Json = decoded.asJson
+    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
+    diffJ should be(JsonPatch(Nil))
+  }
+
+
   it should "round-trip scrooge thrift models [outer]" in {
-    val jsonString =
+    testRoundTrip[OuterStruct](
       """
         |{
         |  "foo" : "hello",
@@ -53,23 +62,11 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |    }
         |  }
         |}
-      """.stripMargin
-
-    val jsonBefore: Json = parse(jsonString).toOption.get
-
-    val decoded: StructB = jsonBefore.as[StructB].toOption.get
-    // val decoded: StructB = StructB(Union1.C(StructC("hello")))
-    println(s"Decoded is $decoded")
-
-    val jsonAfter: Json = decoded.asJson
-
-    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
-    if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
-    diffJ should be(JsonPatch(Nil))
+      """.stripMargin)
   }
 
   it should "round-trip StructB (struct containing a union)" in {
-    val jsonString =
+    testRoundTrip[StructB](
       """
         |{
         |  "u" : {
@@ -78,23 +75,11 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |    }
         |  }
         |}
-      """.stripMargin
-
-    val jsonBefore: Json = parse(jsonString).toOption.get
-
-    val decoded: StructB = jsonBefore.as[StructB].toOption.get
-    // val decoded: StructB = StructB(Union1.C(StructC("hello")))
-    println(s"Decoded is $decoded")
-
-    val jsonAfter: Json = decoded.asJson
-
-    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
-    if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
-    diffJ should be(JsonPatch(Nil))
+      """.stripMargin)
   }
 
   it should "round-trip scrooge thrift models" in {
-    val jsonString =
+    testRoundTrip[StructA](
       """
         |{
         |  "b": {
@@ -114,17 +99,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |    "s": "x"
         |  }
         |}
-      """.stripMargin
-
-    val jsonBefore: Json = parse(jsonString).toOption.get
-
-    val decoded: StructA = jsonBefore.as[StructA].toOption.get
-
-    val jsonAfter: Json = decoded.asJson
-
-    val diffJ = diff[Json, JsonPatch[Json]](jsonBefore, jsonAfter)
-    if (diffJ != JsonPatch(Nil)) println(s"${diffJ.toString}")
-    diffJ should be(JsonPatch(Nil))
+      """.stripMargin)
   }
 
   it should "accumulate errors" in {
