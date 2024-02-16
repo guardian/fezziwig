@@ -237,6 +237,12 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
       """.stripMargin)
   }
 
+  it should "round-trip optional fields as missing rather than json null" in {
+    implicit val structWithOptionalDecoder: Decoder[StructWithOptional] = deriveDecoder
+    implicit val structWithOptionalEncoder: Encoder[StructWithOptional] = deriveEncoder
+    testRoundTrip[StructWithOptional]("{}")
+  }
+
   it should "accumulate errors" in {
     //In the following json, the fields 's', 'foo' and 'x' have incorrect types
     val expectedFailures = List(

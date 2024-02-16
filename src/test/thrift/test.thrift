@@ -50,10 +50,6 @@ struct InnerStruct {
     1: optional OuterStruct outer
 }
 
-struct WithDefault {
-    1: optional i32 something = 42
-}
-
 struct RecTree {
   1: list<RecTree> children
   2: i16 item
@@ -86,4 +82,8 @@ struct ListElementFields {
 
 struct ListItem {
   1: required list<BlockElement> elements = [];
+}
+
+struct StructWithOptional {
+  1: optional string s;
 }
