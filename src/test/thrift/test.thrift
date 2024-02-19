@@ -41,15 +41,6 @@ struct DefaultTestStruct {
   7: required list<i32> seventh
 }
 
-struct OuterStruct {
-    1: required string foo
-    2: optional InnerStruct inner
-}
-
-struct InnerStruct {
-    1: optional OuterStruct outer
-}
-
 struct RecTree {
   1: list<RecTree> children
   2: i16 item
