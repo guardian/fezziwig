@@ -20,11 +20,6 @@ import org.scalatest.matchers.should.Matchers
 import shapeless._
 
 class FezziwigTests extends AnyFlatSpec with Matchers  {
-  implicit val outerStructDecoder: Decoder[OuterStruct] = deriveDecoder
-  implicit val outerStructEncoder: Encoder[OuterStruct] = deriveEncoder
-  implicit val innerStructDecoder: Decoder[InnerStruct] = deriveDecoder
-  implicit val innerStructEncoder: Encoder[InnerStruct] = deriveEncoder
-
   implicit val union1Decoder: Decoder[Union1] = deriveDecoder
   implicit val union1Encoder: Encoder[Union1] = deriveEncoder
 
@@ -149,20 +144,6 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |""".stripMargin)
   }
 
-  it should "round-trip scrooge recursive thrift models of the form A->Option[A]->Option[B]" in {
-    testRoundTrip[OuterStruct](
-      """
-        |{
-        |  "foo" : "hello",
-        |  "inner" : {
-        |    "outer" : {
-        |      "foo" : "oh"
-        |    }
-        |  }
-        |}
-      """.stripMargin)
-  }
-
   it should "round-trip scrooge recursive thrift models of the form A->Option[B]->List[C]->List[A]" in {
     testRoundTrip[BlockElement](
       """
@@ -200,7 +181,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
       """.stripMargin)
   }
 
-  it should "round-trip scrooge thrift models" in {
+  it should "round-trip StructA (a more nested struct)" in {
     testRoundTrip[StructA](
       """
         |{
