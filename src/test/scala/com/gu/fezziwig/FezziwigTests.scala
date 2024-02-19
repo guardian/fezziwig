@@ -97,7 +97,8 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |  "third": 3,
         |  "fourth": 4,
         |  "fifth": 5,
-        |  "sixth": 6
+        |  "sixth": 6,
+        |  "seventh": [1,2]
         |}
       """.stripMargin
 
@@ -105,7 +106,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
     val decoded: Option[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct].toOption
 
-    decoded shouldBe Some(DefaultTestStruct(None, 2, 3, 4, 5, 6))
+    decoded shouldBe Some(DefaultTestStruct(None, 2, 3, 4, 5, 6, List(1, 2)))
   }
 
   it should "decode a missing optional field with default" in {
@@ -116,7 +117,8 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |  "third": 3,
         |  "fourth": 4,
         |  "fifth": 5,
-        |  "sixth": 6
+        |  "sixth": 6,
+        |  "seventh": [1,2]
         |}
       """.stripMargin
 
@@ -124,7 +126,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
     val decoded: Option[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct].toOption
 
-    decoded shouldBe Some(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6))
+    decoded shouldBe Some(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6, List(1,2)))
   }
 
   it should "fail to decode a missing default-requiredness field without default" in {
@@ -135,7 +137,8 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |  "second": 2,
         |  "fourth": 4,
         |  "fifth": 5,
-        |  "sixth": 6
+        |  "sixth": 6,
+        |  "seventh": [1,2]
         |}
       """.stripMargin
 
@@ -154,7 +157,8 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |  "second": 2,
         |  "third": 3,
         |  "fifth": 5,
-        |  "sixth": 6
+        |  "sixth": 6,
+        |  "seventh": [1,2]
         |}
       """.stripMargin
 
@@ -162,7 +166,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
     val decoded: Option[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct].toOption
 
-    decoded shouldBe Some(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6))
+    decoded shouldBe Some(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6, List(1, 2)))
   }
 
   it should "fail to decode a missing required field without default" in {
@@ -173,7 +177,8 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |  "second": 2,
         |  "third": 3,
         |  "fourth": 4,
-        |  "sixth": 6
+        |  "sixth": 6,
+        |  "seventh": [1, 2]
         |}
       """.stripMargin
 
@@ -192,7 +197,8 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
         |  "second": 2,
         |  "third": 3,
         |  "fourth": 4,
-        |  "fifth": 5
+        |  "fifth": 5,
+        |  "seventh": [1,2]
         |}
       """.stripMargin
 
@@ -200,6 +206,26 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
     val decoded: Option[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct].toOption
 
-    decoded shouldBe Some(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6))
+    decoded shouldBe Some(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6, List(1,2)))
+  }
+
+  it should "decode a missing required list field without default" in {
+    val jsonString =
+      """
+        |{
+        |  "first": 1,
+        |  "second": 2,
+        |  "third": 3,
+        |  "fourth": 4,
+        |  "fifth": 5,
+        |  "sixth": 6
+        |}
+      """.stripMargin
+
+    val jsonBefore: Json = parse(jsonString).toOption.get
+
+    val decoded: Decoder.Result[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct]
+
+    decoded shouldBe Right(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6, List()))
   }
 }

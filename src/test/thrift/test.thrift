@@ -38,4 +38,5 @@ struct DefaultTestStruct {
   4: i32 fourth = 4
   5: required i32 fifth
   6: required i32 sixth = 6
+  7: required list<i32> seventh
 }
