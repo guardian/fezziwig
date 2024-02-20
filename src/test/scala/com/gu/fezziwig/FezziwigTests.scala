@@ -20,47 +20,6 @@ import org.scalatest.matchers.should.Matchers
 import shapeless._
 
 class FezziwigTests extends AnyFlatSpec with Matchers  {
-  implicit val union1Decoder: Decoder[Union1] = deriveDecoder
-  implicit val union1Encoder: Encoder[Union1] = deriveEncoder
-
-  implicit val structBDecoder: Decoder[StructB] = deriveDecoder
-  implicit val structBEncoder: Encoder[StructB] = deriveEncoder
-
-  implicit val structCDecoder: Decoder[StructC] = deriveDecoder
-  implicit val structCEncoder: Encoder[StructC] = deriveEncoder
-
-  implicit val structDDecoder: Decoder[StructD] = deriveDecoder
-  implicit val structDEncoder: Encoder[StructD] = deriveEncoder
-
-  implicit val structADecoder: Decoder[StructA] = deriveDecoder
-  implicit val structAEncoder: Encoder[StructA] = deriveEncoder
-
-  implicit val recTreeDecoder: Decoder[RecTree] = deriveDecoder
-  implicit val recTreeEncoder: Encoder[RecTree] = deriveEncoder
-
-  implicit val recListDecoder: Decoder[RecList] = deriveDecoder
-  implicit val recListEncoder: Encoder[RecList] = deriveEncoder
-
-  implicit val coRecDecoder: Decoder[CoRec] = deriveDecoder
-  implicit val coRecEncoder: Encoder[CoRec] = deriveEncoder
-
-  implicit val coRec2Decoder: Decoder[CoRec2] = deriveDecoder
-  implicit val coRec2Encoder: Encoder[CoRec2] = deriveEncoder
-
-  implicit val vectorTestDecoder: Decoder[VectorTest] = deriveDecoder
-  implicit val vectorTestEncoder: Encoder[VectorTest] = deriveEncoder
-
-  implicit val blockElementDecoder: Decoder[BlockElement] = deriveDecoder
-  implicit val blockElementEncoder: Encoder[BlockElement] = deriveEncoder
-
-  implicit val listElementFieldsDecoder: Decoder[ListElementFields] = deriveDecoder
-  implicit val listElementFieldsEncoder: Encoder[ListElementFields] = deriveEncoder
-
-  implicit val listItemDecoder: Decoder[ListItem] = deriveDecoder
-  implicit val listItemEncoder: Encoder[ListItem] = deriveEncoder
-
-  implicit val decodeDefaultTestStruct: Decoder[DefaultTestStruct] = deriveDecoder
-
   private def testRoundTrip[T](jsonString: String)(implicit decoder: Decoder[T], encoder: Encoder[T]) = {
     val jsonBefore: Json = parse(jsonString).toOption.get
     val decoded: T = jsonBefore.as[T].toOption.get
@@ -206,7 +165,6 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
   }
 
   it should "follow circe default behavior of serialising optional fields as nulls rather than missing" in {
-    implicit val structWithOptionalEncoder: Encoder[StructWithOptional] = deriveEncoder
     val jsonAfter: Json = StructWithOptional().asJson
     jsonAfter.asObject.flatMap(_("optionalField")).value.isNull should be(true)
   }
