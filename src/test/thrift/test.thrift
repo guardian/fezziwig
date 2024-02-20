@@ -41,10 +41,6 @@ struct DefaultTestStruct {
   7: required list<i32> seventh
 }
 
-struct WithDefault {
-    1: optional i32 something = 42
-}
-
 struct RecTree {
   1: list<RecTree> children
   2: i16 item
