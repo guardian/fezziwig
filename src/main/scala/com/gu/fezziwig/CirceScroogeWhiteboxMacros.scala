@@ -3,10 +3,29 @@ package com.gu.fezziwig
 import scala.language.experimental.macros
 import scala.reflect.macros.whitebox
 import com.twitter.scrooge.{ThriftStruct, ThriftUnion}
-import shapeless.{|¬|, LabelledGeneric}
+import shapeless.{|¬|, LabelledGeneric, Lazy}
+import io.circe.{Decoder, Encoder}
+import io.circe.generic.semiauto._
+import io.circe.generic.decoding.DerivedDecoder
+import io.circe.generic.encoding.DerivedAsObjectEncoder
 
 object CirceScroogeWhiteboxMacros {
   type NotUnion[T] = |¬|[ThriftUnion]#λ[T]  //For telling the compiler not to use certain macros for thrift Unions
+
+  implicit def thriftStructDecoder[A <: ThriftStruct : NotUnion](implicit
+    derivedDecoder: Lazy[DerivedDecoder[A]]
+  ): Decoder[A] = deriveDecoder[A](derivedDecoder)
+  implicit def thriftStructEncoder[A <: ThriftStruct : NotUnion](implicit
+    derivedEncoder: Lazy[DerivedAsObjectEncoder[A]]
+  ): Encoder[A] = deriveEncoder[A](derivedEncoder)
+
+  implicit def thriftUnionDecoder[A <: ThriftUnion](implicit
+    derivedDecoder: Lazy[DerivedDecoder[A]]
+  ): Decoder[A] = deriveDecoder[A](derivedDecoder)
+  implicit def thriftUnionEncoder[A <: ThriftUnion](implicit
+    derivedEncoder: Lazy[DerivedAsObjectEncoder[A]]
+  ): Encoder[A] = deriveEncoder[A](derivedEncoder)
+
   implicit def thriftStructGeneric[A <: ThriftStruct : NotUnion, R]: LabelledGeneric.Aux[A, R] = macro CirceScroogeWhiteboxMacrosImpl.thriftStructGeneric[A]
 
   implicit def thriftUnionGeneric[A <: ThriftUnion, R]: LabelledGeneric.Aux[A, R] = macro CirceScroogeWhiteboxMacrosImpl.thriftUnionGeneric[A]
@@ -26,9 +45,6 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
     * LabelledGeneric implicit converts between the Thrift struct and a hlist
     * representation that matches what shapeless would generate for a similar
     * case class, which circe knows how to generate an Encoder/Decoder for.
-    *
-    * @note Fully automatic derivation does not work with this macro, so you
-    * must derive the Encoders/Decoders where they’re needed.
     *
     * =Example=
     *
@@ -65,18 +81,6 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
     *     }
     *   }
     * }
-    * }}}
-    *
-    * Then in order to get an Encoder/Decoder for OuterStruct, you will need to
-    * use circe’s semiauto derivation for it and sub-structs:
-    *
-    * {{{
-    * import io.circe.generic.semiauto._
-    *
-    * implicit val outerStructEncoder: Encoder[OuterStruct] = deriveEncoder
-    * implicit val outerStructDecoder: Decoder[OuterStruct] = deriveDecoder
-    * implicit val innerStructEncoder: Encoder[InnerStruct] = deriveEncoder
-    * implicit val innerStructDecoder: Decoder[InnerStruct] = deriveDecoder
     * }}}
     *
     * =Scrooge Representation=
@@ -213,9 +217,6 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
     *   }
     * }
     * }}}
-    *
-    * @note Fully automatic derivation doesn’t work with this macro, so semi-auto
-    * derivation is required.
     */
   def thriftUnionGeneric[A: WeakTypeTag]: Tree = {
     val A = weakTypeOf[A]
