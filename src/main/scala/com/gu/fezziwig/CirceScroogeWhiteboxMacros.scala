@@ -72,6 +72,8 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
     *
     * {{{
     * import io.circe.generic.semiauto._
+    * import com.gu.fezziwig.CirceScroogeMacros._
+    * import com.gu.fezziwig.CirceScroogeWhiteboxMacros._
     *
     * implicit val outerStructEncoder: Encoder[OuterStruct] = deriveEncoder
     * implicit val outerStructDecoder: Decoder[OuterStruct] = deriveDecoder
