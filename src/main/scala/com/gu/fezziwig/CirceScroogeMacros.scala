@@ -248,7 +248,7 @@ private class CirceScroogeMacrosImpl(val c: blackbox.Context) {
           val result: Option[_root_.io.circe.Decoder.Result[$A]] = c.keys.getOrElse(Nil).headOption.flatMap {
             case ..${decoderCases._1 ++ Seq(cq"""_ => _root_.scala.None""")}
           }
-          result.getOrElse(Either.left(_root_.io.circe.DecodingFailure("Missing field under union: "+ ${A.typeSymbol.fullName}, c.history)))
+          result.getOrElse(_root_.scala.util.Left(_root_.io.circe.DecodingFailure("Missing field under union: "+ ${A.typeSymbol.fullName}, c.history)))
         }
 
         override def decodeAccumulating(c: _root_.io.circe.HCursor): _root_.io.circe.Decoder.AccumulatingResult[$A] = {
