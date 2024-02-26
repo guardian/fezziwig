@@ -1,6 +1,8 @@
 package com.gu.fezziwig
 
 import com.gu.fezziwig.CirceScroogeMacros._
+import com.twitter.io.Buf
+import com.twitter.scrooge._
 import diffson._
 import diffson.circe._
 import diffson.jsonpatch._
@@ -9,6 +11,7 @@ import io.circe.CursorOp.DownField
 import io.circe._
 import io.circe.parser._
 import io.circe.syntax._
+import org.apache.thrift.protocol._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -227,5 +230,10 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
     val decoded: Decoder.Result[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct]
 
     decoded shouldBe Right(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6, List()))
+  }
+
+  it should "encode an UnknownUnionField successfully as null" in {
+    val x = Union1.UnknownUnionField(TFieldBlob(new TField("e", TType.STRUCT, 3), Buf.slowFromHexString("ff1e")))
+    x.asJson should be (Json.Null)
   }
 }
