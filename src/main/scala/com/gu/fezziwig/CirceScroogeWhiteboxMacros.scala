@@ -265,7 +265,7 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
       val paramName = TermName(param.name.toString())
       cq"${injectRPattern(i)(pq"_root_.shapeless.Inl(${paramName})")} => ${getApplyMethod(memberClass.typeSignature)}(${paramName})"
     }}
-    val cNilCase = cq"""${injectR(paramsWithClasses.length)(pq"(_: _root_.shapeless.CNil)")} => throw new RuntimeException("Encountered CNil while converting from ReprType")"""
+    val cNilCase = cq"""${injectR(paramsWithClasses.length)(pq"(_)")} => throw new RuntimeException("Encountered CNil value while converting from ReprType")"""
 
     val labelledGeneric = q"""
     new _root_.shapeless.LabelledGeneric[$A] {
