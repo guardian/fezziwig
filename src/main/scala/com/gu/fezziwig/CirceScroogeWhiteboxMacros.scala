@@ -2,8 +2,10 @@ package com.gu.fezziwig
 
 import scala.language.experimental.macros
 import scala.reflect.macros.whitebox
+
 import com.twitter.scrooge.{ThriftStruct, ThriftUnion}
-import shapeless.{|¬|, LabelledGeneric}
+import org.apache.thrift.protocol.TField
+import shapeless.{|¬|, LabelledGeneric, Witness, labelled, ::, HNil}
 
 object CirceScroogeWhiteboxMacros {
   type NotUnion[T] = |¬|[ThriftUnion]#λ[T]  //For telling the compiler not to use certain macros for thrift Unions
@@ -11,6 +13,25 @@ object CirceScroogeWhiteboxMacros {
 
   implicit def thriftUnionGeneric[A <: ThriftUnion, R]: LabelledGeneric.Aux[A, R] = macro CirceScroogeWhiteboxMacrosImpl.thriftUnionGeneric[A]
 
+  val nameWitness = Witness(Symbol("name"))
+  val typeWitness = Witness(Symbol("type"))
+  val idWitness = Witness(Symbol("id"))
+  type TFieldRepr = labelled.FieldType[nameWitness.T, String] :: labelled.FieldType[typeWitness.T, Byte] :: labelled.FieldType[idWitness.T, Short] :: HNil
+
+  implicit val tfieldGeneric: LabelledGeneric.Aux[TField, TFieldRepr] = new LabelledGeneric[TField] {
+    type Repr = TFieldRepr
+
+    def to(struct: TField): Repr = {
+      val name: labelled.FieldType[nameWitness.T, String] = labelled.field(struct.name)
+      val fieldType: labelled.FieldType[typeWitness.T, Byte] = labelled.field(struct.`type`)
+      val id: labelled.FieldType[idWitness.T, Short] = labelled.field(struct.id)
+      name :: fieldType :: id :: HNil
+    }
+
+    def from(hlist: Repr): TField = hlist match {
+      case name :: fieldType :: id :: HNil => new TField(name, fieldType, id)
+    }
+  }
 }
 
 private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
@@ -192,11 +213,15 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
     *
     * {{{
     * {
-    *   import shapeless.{Witness, :+:, labelled, CNil, Inl, Inr}
+    *   import com.twitter.io.Buf
+    *   import com.twitter.scrooge.TFieldBlob
+    *   import org.apache.thrift.protocol.TField
+    *   import shapeless.{Witness, :+:, labelled, CNil, Inl, Inr, LabelledGeneric}
     *
     *   val dWitness = Witness(Symbol("d"))
     *   val cWitness = Witness(Symbol("c"))
-    *   type Union1Repr = labelled.FieldType[dWitness.T, StructD] :+: labelled.FieldType[cWitness.T, StructC] :+: CNil
+    *   val unknownUnionFieldWitness = Witness(Symbol("__unknownUnionField"))
+    *   type Union1Repr = labelled.FieldType[dWitness.T, StructD] :+: labelled.FieldType[cWitness.T, StructC] :+: labelled.FieldType[unknownUnionFieldWitness.T, TField] :+: CNil
     *
     *   new LabelledGeneric[Union1] {
     *     type Repr = Union1Repr
@@ -204,13 +229,14 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
     *     def to(union: Union1): Repr = union match {
     *       case Union1.D(x) => Inl(labelled.field(x))
     *       case Union1.C(x) => Inr(Inl(labelled.field(x)))
-    *       case Union1.UnknownUnionField(_) => throw new RuntimeException("Unknown union field")
+    *       case Union1.UnknownUnionField(TFieldBlob(tfield, _)) => Inr(Inr(Inl(labelled.field(tfield))))
     *     }
     *
     *     def from(repr: Repr): Union1 = repr match {
     *       case Inl(d) => Union1.D(d)
     *       case Inr(Inl(c)) => Union1.C(c)
-    *       case Inr(Inr((_: CNil))) => throw new RuntimeException("Encountered CNil while converting from ReprType")
+    *       case Inr(Inr(Inl(tfield))) => Union1.UnknownUnionField(TFieldBlob(tfield, Buf.Empty))
+    *       case Inr(Inr(Inr(_))) => throw new RuntimeException("Encountered CNil value while converting from ReprType")
     *     }
     *   }
     * }
@@ -237,7 +263,8 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
         q"""val ${witnessName} = _root_.shapeless.Witness(_root_.scala.Symbol(${symbolString}))"""
       }
     }
-    val reprType: Tree = paramsWithClasses.foldRight[Tree](tq"""_root_.shapeless.CNil""") { case ((param, _), acc) =>
+    val unknownUnionFieldWitness: Tree = q"""val unknownUnionFieldWitness = _root_.shapeless.Witness(_root_.scala.Symbol("__unknownUnionField"))"""
+    val reprType: Tree = paramsWithClasses.foldRight[Tree](tq"""_root_.shapeless.:+:[_root_.shapeless.labelled.FieldType[unknownUnionFieldWitness.T, _root_.org.apache.thrift.protocol.TField], _root_.shapeless.CNil]""") { case ((param, _), acc) =>
       val witnessName = TermName(s"${param.name}Witness")
       tq"""_root_.shapeless.:+:[_root_.shapeless.labelled.FieldType[${witnessName}.T, ${param.typeSignature.dealias}], $acc]"""
     }
@@ -259,13 +286,21 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
       val field = q"_root_.shapeless.Inl(_root_.shapeless.labelled.field(x))"
       cq"${memberClass.companion}(x) => ${injectR(i)(field)}"
     }}
-    val unknownUnionFieldCase = cq"""${A.typeSymbol.companion}.UnknownUnionField(_) => throw new _root_.java.lang.RuntimeException("Unknown union field")"""
+    val unknownUnionFieldCase = {
+      val field = q"_root_.shapeless.Inl(_root_.shapeless.labelled.field(tfield))"
+      cq"""${A.typeSymbol.companion}.UnknownUnionField(_root_.com.twitter.scrooge.TFieldBlob(tfield, _)) => ${injectR(paramsWithClasses.length)(field)}"""
+    }
 
     val fromCases = paramsWithClasses.zipWithIndex.map{case ((param, memberClass), i) => {
       val paramName = TermName(param.name.toString())
       cq"${injectRPattern(i)(pq"_root_.shapeless.Inl(${paramName})")} => ${getApplyMethod(memberClass.typeSignature)}(${paramName})"
     }}
-    val cNilCase = cq"""${injectR(paramsWithClasses.length)(pq"(_)")} => throw new RuntimeException("Encountered CNil value while converting from ReprType")"""
+
+    val unknownUnionFieldFromCase = {
+      cq"${injectRPattern(paramsWithClasses.length)(pq"_root_.shapeless.Inl(tfield)")} => ${A.typeSymbol.companion}.UnknownUnionField(_root_.com.twitter.scrooge.TFieldBlob(tfield, _root_.com.twitter.io.Buf.Empty))"
+    }
+
+    val cNilCase = cq"""${injectR(paramsWithClasses.length + 1)(pq"(_)")} => throw new RuntimeException("Encountered CNil value while converting from ReprType")"""
 
     val labelledGeneric = q"""
     new _root_.shapeless.LabelledGeneric[$A] {
@@ -276,11 +311,11 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
       }
 
       def from(repr: Repr): $A = repr match {
-        case ..${fromCases ++ List(cNilCase)}
+        case ..${fromCases ++ List(unknownUnionFieldFromCase, cNilCase)}
       }
     }"""
     q"""{
-      ..$witnesses
+      ..${witnesses ++ List(unknownUnionFieldWitness)}
 
       $labelledGeneric
     }"""
