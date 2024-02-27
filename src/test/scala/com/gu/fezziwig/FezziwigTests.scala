@@ -1,7 +1,7 @@
 package com.gu.fezziwig
 
 import com.gu.fezziwig.CirceScroogeMacros._
-import com.gu.fezziwig.CirceScroogeWhiteboxMacros._
+import com.gu.fezziwig.CirceScroogeWhiteboxMacros.{thriftStructGeneric, thriftUnionGeneric, tfieldGeneric}
 import com.twitter.io.Buf
 import com.twitter.scrooge._
 import diffson._
@@ -392,8 +392,38 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
     decoded shouldBe Right(DefaultTestStruct(Some(1), 2, 3, 4, 5, 6, List()))
   }
 
-  it should "encode an UnknownUnionField successfully as null" in {
-    val x = Union1.UnknownUnionField(TFieldBlob(new TField("e", TType.STRUCT, 3), Buf.slowFromHexString("ff1e")))
-    x.asJson should be (Json.Null)
+  it should "encode an UnknownUnionField successfully as an object (dropping field content)" in {
+    val tfieldBlob = TFieldBlob(new TField("e", TType.STRUCT, 3), Buf.slowFromHexString("ff1e"))
+    val x: Union1 = Union1.UnknownUnionField(tfieldBlob)
+
+    val expectedString =
+      """
+        | {
+        |   "__unknownUnionField": {
+        |      "name": "e",
+        |      "type": 12,
+        |      "id": 3
+        |   }
+        | }
+      """.stripMargin
+    val expectedJson = parse(expectedString)
+
+    Right(x.asJson) should be (expectedJson)
+
+    val decoded: Either[DecodingFailure, Union1] = expectedJson.toOption.get.as[Union1]
+    decoded should be (Right(Union1.UnknownUnionField(tfieldBlob.copy(content = Buf.Empty))))
+  }
+
+  it should "round-trip an UnknownUnionField successfully" in {
+    testRoundTrip[Union1](
+      """
+        | {
+        |   "__unknownUnionField": {
+        |      "name": "e",
+        |      "type": 12,
+        |      "id": 3
+        |   }
+        | }
+      """.stripMargin)
   }
 }
