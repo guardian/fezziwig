@@ -6,6 +6,8 @@ import scala.reflect.macros.whitebox
 import com.twitter.scrooge.{ThriftStruct, ThriftUnion}
 import org.apache.thrift.protocol.TField
 import shapeless.{|¬|, LabelledGeneric, Witness, labelled, ::, HNil}
+import shapeless.record._
+import shapeless.syntax.singleton._
 
 object CirceScroogeWhiteboxMacros {
   type NotUnion[T] = |¬|[ThriftUnion]#λ[T]  //For telling the compiler not to use certain macros for thrift Unions
@@ -13,19 +15,13 @@ object CirceScroogeWhiteboxMacros {
 
   implicit def thriftUnionGeneric[A <: ThriftUnion, R]: LabelledGeneric.Aux[A, R] = macro CirceScroogeWhiteboxMacrosImpl.thriftUnionGeneric[A]
 
-  val nameWitness = Witness(Symbol("name"))
-  val typeWitness = Witness(Symbol("type"))
-  val idWitness = Witness(Symbol("id"))
-  type TFieldRepr = labelled.FieldType[nameWitness.T, String] :: labelled.FieldType[typeWitness.T, Byte] :: labelled.FieldType[idWitness.T, Short] :: HNil
+  type TFieldRepr = Record.`'name -> String, 'type -> Byte, 'id -> Short`.T
 
   implicit val tfieldGeneric: LabelledGeneric.Aux[TField, TFieldRepr] = new LabelledGeneric[TField] {
     type Repr = TFieldRepr
 
     def to(struct: TField): Repr = {
-      val name: labelled.FieldType[nameWitness.T, String] = labelled.field(struct.name)
-      val fieldType: labelled.FieldType[typeWitness.T, Byte] = labelled.field(struct.`type`)
-      val id: labelled.FieldType[idWitness.T, Short] = labelled.field(struct.id)
-      name :: fieldType :: id :: HNil
+      ('name ->> struct.name) :: ('type ->> struct.`type`) :: ('id ->> struct.id) :: HNil
     }
 
     def from(hlist: Repr): TField = hlist match {
