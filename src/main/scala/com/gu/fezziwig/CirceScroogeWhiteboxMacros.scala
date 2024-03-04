@@ -11,13 +11,13 @@ import shapeless.syntax.singleton._
 
 object CirceScroogeWhiteboxMacros {
   type NotUnion[T] = |¬|[ThriftUnion]#λ[T]  //For telling the compiler not to use certain macros for thrift Unions
-  implicit def thriftStructGeneric[A <: ThriftStruct : NotUnion, R]: LabelledGeneric.Aux[A, R] = macro CirceScroogeWhiteboxMacrosImpl.thriftStructGeneric[A]
+  implicit def thriftStructLabelledGeneric[A <: ThriftStruct : NotUnion, R]: LabelledGeneric.Aux[A, R] = macro CirceScroogeWhiteboxMacrosImpl.thriftStructLabelledGeneric[A]
 
-  implicit def thriftUnionGeneric[A <: ThriftUnion, R]: LabelledGeneric.Aux[A, R] = macro CirceScroogeWhiteboxMacrosImpl.thriftUnionGeneric[A]
+  implicit def thriftUnionLabelledGeneric[A <: ThriftUnion, R]: LabelledGeneric.Aux[A, R] = macro CirceScroogeWhiteboxMacrosImpl.thriftUnionLabelledGeneric[A]
 
   type TFieldRepr = Record.`'name -> String, 'type -> Byte, 'id -> Short`.T
 
-  implicit val tfieldGeneric: LabelledGeneric.Aux[TField, TFieldRepr] = new LabelledGeneric[TField] {
+  implicit val tfieldLabelledGeneric: LabelledGeneric.Aux[TField, TFieldRepr] = new LabelledGeneric[TField] {
     type Repr = TFieldRepr
 
     def to(struct: TField): Repr = {
@@ -124,7 +124,7 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
     * }
     * }}}
     */
-  def thriftStructGeneric[A: WeakTypeTag](x: Tree): Tree = {
+  def thriftStructLabelledGeneric[A: WeakTypeTag](x: Tree): Tree = {
     val A = weakTypeOf[A]
     val apply = getApplyMethod(A)
     val params = apply.paramLists.head
@@ -194,7 +194,7 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
 
   /**
     * Provides a LabelledGeneric implicit for Thrift unions, as
-    * [[thriftStructGeneric]] does for structs.
+    * [[thriftStructLabelledGeneric]] does for structs.
     *
     * Given this thrift definition
     *
@@ -241,7 +241,7 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
     * @note Fully automatic derivation doesn’t work with this macro, so semi-auto
     * derivation is required.
     */
-  def thriftUnionGeneric[A: WeakTypeTag]: Tree = {
+  def thriftUnionLabelledGeneric[A: WeakTypeTag]: Tree = {
     val A = weakTypeOf[A]
     val memberClasses: List[Symbol] = getUnionMemberClasses(A)
     val paramsWithClasses = memberClasses.map(memberClass => {

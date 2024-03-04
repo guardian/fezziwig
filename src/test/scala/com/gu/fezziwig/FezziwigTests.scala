@@ -1,7 +1,7 @@
 package com.gu.fezziwig
 
 import com.gu.fezziwig.CirceScroogeMacros._
-import com.gu.fezziwig.CirceScroogeWhiteboxMacros.{thriftStructGeneric, thriftUnionGeneric, tfieldGeneric}
+import com.gu.fezziwig.CirceScroogeWhiteboxMacros.{thriftStructLabelledGeneric, thriftUnionLabelledGeneric, tfieldLabelledGeneric}
 import com.twitter.io.Buf
 import com.twitter.scrooge._
 import diffson._
