@@ -1,7 +1,7 @@
 package com.gu.fezziwig
 
 import com.gu.fezziwig.CirceScroogeMacros._
-import com.gu.fezziwig.CirceScroogeWhiteboxMacros.{thriftStructGeneric, thriftUnionGeneric, tfieldGeneric}
+import com.gu.fezziwig.CirceScroogeWhiteboxMacros.{thriftStructGeneric, thriftUnionGeneric, tfieldGeneric, thriftStructPlainGeneric}
 import com.twitter.io.Buf
 import com.twitter.scrooge._
 import diffson._
@@ -34,6 +34,7 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
   implicit val structADecoder: Decoder[StructA] = deriveDecoder
   implicit val structAEncoder: Encoder[StructA] = deriveEncoder
+  val plainGenericA: Generic[A] = implicitly
 
   implicit val recTreeDecoder: Decoder[RecTree] = deriveDecoder
   implicit val recTreeEncoder: Encoder[RecTree] = deriveEncoder

@@ -5,13 +5,14 @@ import scala.reflect.macros.whitebox
 
 import com.twitter.scrooge.{ThriftStruct, ThriftUnion}
 import org.apache.thrift.protocol.TField
-import shapeless.{|¬|, LabelledGeneric, Witness, labelled, ::, HNil}
+import shapeless.{|¬|, LabelledGeneric, Witness, labelled, ::, HNil, Generic}
 import shapeless.record._
 import shapeless.syntax.singleton._
 
 object CirceScroogeWhiteboxMacros {
   type NotUnion[T] = |¬|[ThriftUnion]#λ[T]  //For telling the compiler not to use certain macros for thrift Unions
   implicit def thriftStructGeneric[A <: ThriftStruct : NotUnion, R]: LabelledGeneric.Aux[A, R] = macro CirceScroogeWhiteboxMacrosImpl.thriftStructGeneric[A]
+  implicit def thriftStructPlainGeneric[A <: ThriftStruct : NotUnion, R]: Generic.Aux[A, R] = macro CirceScroogeWhiteboxMacrosImpl.thriftStructPlainGeneric[A]
 
   implicit def thriftUnionGeneric[A <: ThriftUnion, R]: LabelledGeneric.Aux[A, R] = macro CirceScroogeWhiteboxMacrosImpl.thriftUnionGeneric[A]
 
@@ -189,6 +190,62 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
       ..$witnesses
 
       $labelledGeneric
+    }"""
+  }
+
+  def thriftStructPlainGeneric[A: WeakTypeTag](x: Tree): Tree = {
+    val A = weakTypeOf[A]
+    val apply = getApplyMethod(A)
+    val params = apply.paramLists.head
+    val fieldNames: List[Tree] = params.zipWithIndex.map{case (p, i) =>
+      if (p.asTerm.isParamWithDefault) {
+        val defaultValue = A.companion.member(TermName("apply$default$" + (i + 1)))
+        q"${TermName(p.name.toString())}.getOrElse(${defaultValue})"
+      } else {
+        q"""${TermName(p.name.toString())}"""
+      }}
+    val reprType: Tree = params.foldRight[Tree](tq"""_root_.shapeless.HNil""") { case (param, acc) =>
+      val fieldType: Tree = if (param.asTerm.isParamWithDefault) {
+        tq"Option[${param.typeSignature}]"
+      } else {
+        q"${param.typeSignature}"
+      }
+      tq"""_root_.shapeless.::[${fieldType}, $acc]"""
+    }
+    val hlist = params.foldRight[Tree](q"""_root_.shapeless.HNil""") { case (param, acc) =>
+      val paramName = TermName(param.name.toString())
+      q"""_root_.shapeless.::(${paramName}, $acc)"""
+    }
+    // hlistPattern is identical to hlist but with the pq interpolator instead of q
+    val hlistPattern = params.foldRight[Tree](pq"""_root_.shapeless.HNil""") { case (param, acc) =>
+      val paramName = TermName(param.name.toString())
+      pq"""_root_.shapeless.::(${paramName}, $acc)"""
+    }
+    val labelledFields = params.map(param => {
+      val paramName = TermName(param.name.toString())
+      val (fieldExpr, fieldType): (Tree, Tree) = if (param.asTerm.isParamWithDefault) {
+        (q"_root_.scala.Some(struct.${paramName})", tq"Option[${param.typeSignature}]")
+      } else {
+        (q"struct.${paramName}", q"${param.typeSignature}")
+      }
+      q"""val ${paramName}: ${fieldType} = _root_.shapeless.labelled.field(${fieldExpr})"""
+      }
+    )
+    val generic = q"""
+    new _root_.shapeless.Generic[$A] {
+      type Repr = ${reprType}
+
+      def to(struct: $A): Repr = {
+        ..$labelledFields
+        $hlist
+      }
+
+      def from(hlist: Repr): $A = hlist match {
+        case $hlistPattern => $apply(..${fieldNames})
+      }
+    }"""
+    q"""{
+      $generic
     }"""
   }
 
