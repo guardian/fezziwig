@@ -40,3 +40,41 @@ struct DefaultTestStruct {
   6: required i32 sixth = 6
   7: required list<i32> seventh
 }
+
+struct RecTree {
+  1: list<RecTree> children
+  2: i16 item
+}
+
+struct RecList {
+  1: optional RecList nextitem
+  3: i16 item
+}
+
+struct CoRec {
+  1: CoRec2 other
+}
+
+struct CoRec2 {
+  1: optional CoRec other
+}
+
+struct VectorTest {
+  1: list<RecList> lister;
+}
+
+struct BlockElement {
+  1: optional ListElementFields listTypeData;
+}
+
+struct ListElementFields {
+  1: required list<ListItem> items;
+}
+
+struct ListItem {
+  1: required list<BlockElement> elements = [];
+}
+
+struct StructWithOptional {
+  1: optional string optionalField;
+}
