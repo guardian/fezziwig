@@ -6,7 +6,7 @@ scalaVersion := "2.13.14"
 crossScalaVersions := Seq("2.12.10", scalaVersion.value)
 organization := "com.gu"
 
-val circeVersion = "0.14.1"
+val circeVersion = "0.14.10"
 
 licenses := Seq(License.Apache2)
 
