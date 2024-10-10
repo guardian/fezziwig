@@ -214,9 +214,9 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
   it should "accumulate errors" in {
     //In the following json, the fields 's', 'foo' and 'x' have incorrect types
     val expectedFailures = List(
-      DecodingFailure("String", List(DownField("s"), DownField("c"), DownField("u"), DownField("b"))),
-      DecodingFailure("String", List(DownField("foo"))),
-      DecodingFailure("Attempt to decode value on failed cursor", List(DownField("s"), DownField("x")))
+      DecodingFailure("Got value '1' with wrong type, expecting string", List(DownField("s"), DownField("c"), DownField("u"), DownField("b"))),
+      DecodingFailure("Got value '1' with wrong type, expecting string", List(DownField("foo"))),
+      DecodingFailure("Missing required field", List(DownField("s"), DownField("x")))
     )
 
     val jsonString =
@@ -248,7 +248,12 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
     result.isInvalid should be(true)
     result.swap.foreach(nel => {
       nel.toList.length should be(3)
-      nel.toList should be(expectedFailures)
+      nel.toList.zip(expectedFailures).foreach {
+        case (found, expected) => {
+          found.message shouldBe expected.message
+          found.history shouldBe expected.history
+        }
+      }
     })
   }
 
@@ -309,7 +314,8 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
     val decoded: Decoder.Result[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct]
 
-    decoded shouldBe Left(DecodingFailure("Attempt to decode value on failed cursor", List(DownField("third"))))
+    decoded.swap.map(_.message) shouldBe Right("Missing required field")
+    decoded.swap.map(_.history) shouldBe Right(List(DownField("third")))
   }
 
   it should "decode a missing default-requiredness field with default" in {
@@ -349,7 +355,8 @@ class FezziwigTests extends AnyFlatSpec with Matchers  {
 
     val decoded: Decoder.Result[DefaultTestStruct] = jsonBefore.as[DefaultTestStruct]
 
-    decoded shouldBe Left(DecodingFailure("Attempt to decode value on failed cursor", List(DownField("fifth"))))
+    decoded.swap.map(_.message) shouldBe Right("Missing required field")
+    decoded.swap.map(_.history) shouldBe Right(List(DownField("fifth")))
   }
 
   it should "decode a missing required field with default" in {
