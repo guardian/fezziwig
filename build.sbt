@@ -30,7 +30,7 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
   "org.apache.thrift" % "libthrift" % "0.21.0",
-  "com.twitter" %% "scrooge-core" % "21.12.0",
+  "com.twitter" %% "scrooge-core" % "21.8.0",
   "io.circe" %% "circe-parser" % circeVersion % "test",
   "org.scalatest" %% "scalatest" % "3.2.19" % "test",
   "org.gnieh" %% "diffson-circe" % "4.6.0" % "test"
