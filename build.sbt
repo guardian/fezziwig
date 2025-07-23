@@ -10,7 +10,7 @@ val circeVersion = "0.14.10"
 
 licenses := Seq(License.Apache2)
 
-releaseVersion := ReleaseVersion.fromAggregatedAssessedCompatibilityWithLatestRelease().value
+releaseVersion := ReleaseVersion.fromAssessedCompatibilityWithLatestRelease().value
 
 releaseCrossBuild := true // true if you cross-build the project for multiple Scala versions
 
