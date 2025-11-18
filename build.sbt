@@ -33,7 +33,7 @@ libraryDependencies ++= Seq(
   "com.twitter" %% "scrooge-core" % "21.8.0",
   "io.circe" %% "circe-parser" % circeVersion % "test",
   "org.scalatest" %% "scalatest" % "3.2.19" % "test",
-  "org.gnieh" %% "diffson-circe" % "4.6.0" % "test"
+  "org.gnieh" %% "diffson-circe" % "4.6.1" % "test"
 )
 
 //For tests
