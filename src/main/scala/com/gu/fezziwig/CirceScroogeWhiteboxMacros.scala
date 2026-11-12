@@ -289,7 +289,7 @@ private class CirceScroogeWhiteboxMacrosImpl(val c: whitebox.Context) {
 
     val fromCases = paramsWithClasses.zipWithIndex.map{case ((param, memberClass), i) => {
       val paramName = TermName(param.name.toString())
-      cq"${injectRPattern(i)(pq"_root_.shapeless.Inl(${paramName})")} => ${getApplyMethod(memberClass.typeSignature)}(${paramName})"
+      cq"${injectRPattern(i)(pq"_root_.shapeless.Inl(${paramName})")} => ${memberClass.companion}(${paramName})"
     }}
 
     val unknownUnionFieldFromCase = {
