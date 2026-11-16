@@ -29,7 +29,7 @@ releaseProcess := Seq[ReleaseStep](
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
-  "org.apache.thrift" % "libthrift" % "0.19.0",
+  "org.apache.thrift" % "libthrift" % "0.25.0",
   // Preserve Thrift HTTP transport; this client selects patched core5/core5-h2 5.4.3.
   "org.apache.httpcomponents.client5" % "httpclient5" % "5.6.3",
   "com.twitter" %% "scrooge-core" % "21.8.0",
