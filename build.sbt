@@ -2,7 +2,7 @@ import ReleaseTransformations.*
 import sbtversionpolicy.withsbtrelease.ReleaseVersion
 
 name := "fezziwig"
-scalaVersion := "2.13.14"
+scalaVersion := "2.13.15"
 crossScalaVersions := Seq("2.12.20", scalaVersion.value)
 organization := "com.gu"
 
